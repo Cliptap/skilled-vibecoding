@@ -5,7 +5,7 @@ let openDropdownId = null;
 
 // Ejecutar al cargar la página
 document.addEventListener('DOMContentLoaded', () => {
-    fetchPatients();
+    loadDashboard();
     
     // Cerrar cualquier dropdown si se hace clic fuera
     document.addEventListener('click', (e) => {
@@ -19,25 +19,47 @@ document.addEventListener('DOMContentLoaded', () => {
 // OPERACIONES BACKEND (API)
 // ========================
 
+async function loadDashboard() {
+    fetchStats();
+    fetchPatients();
+}
+
+async function fetchStats() {
+    try {
+        const timeFilter = document.getElementById('filter-time').value;
+        const res = await fetch(`${API_BASE}/stats/kpis?time_filter=${timeFilter}`);
+        if (!res.ok) throw new Error('Error cargando KPIs');
+        const stats = await res.json();
+        
+        document.getElementById('kpi-total').innerText = stats.total;
+        document.getElementById('kpi-fonasa').innerText = stats.fonasa;
+        document.getElementById('kpi-isapre').innerText = stats.isapre;
+    } catch (e) {
+        console.error(e);
+    }
+}
+
 async function fetchPatients() {
-    // Al ser un mock dict backend sin endpoint general (el que hicimos pedía por RUT), 
-    // pero esperaría que añadamos un GET /patients/ o cargaremos un layout vacío en esta versión básica
-    // *Nota: Para que el mock corra simple, simularemos que listamos uno o buscaremos una forma.
-    
-    // Como el endpoint actual get /patients/ no fue diseñado (solo por RUT), dejaremos 
-    // la tabla con un estado informativo o usaremos un state global en el Frontend simulado.
-    // **Ajuste:** Para la demostración asumimos un fetch, si nos da 404 o Falla
-    // dejaremos la tabla para que el usuario empiece a buscar o llene.
-    
-    const tbody = document.getElementById('patients-table-body');
-    tbody.innerHTML = `
-        <tr>
-            <td colspan="5" class="px-6 py-8 text-center text-gray-500">
-                <i data-lucide="users" class="w-8 h-8 mx-auto mb-2 text-gray-400"></i>
-                <p>No hay pacientes a mostrar. Busque por RUT o ingrese un nuevo paciente.</p>
-            </td>
-        </tr>`;
-    lucide.createIcons();
+    try {
+        const timeFilter = document.getElementById('filter-time').value;
+        const sortFilter = document.getElementById('filter-sort').value;
+        
+        const res = await fetch(`${API_BASE}/?time_filter=${timeFilter}&sort=${sortFilter}`);
+        if (!res.ok) throw new Error('Error al cargar tabla');
+        const patients = await res.json();
+        
+        renderPatients(patients);
+    } catch (error) {
+        const tbody = document.getElementById('patients-table-body');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                    <i data-lucide="alert-circle" class="w-8 h-8 mx-auto mb-2 text-red-400"></i>
+                    <p>Error cargando la lista de pacientes.</p>
+                </td>
+            </tr>`;
+        lucide.createIcons();
+    }
 }
 
 async function fetchPatientByRut(rut) {
@@ -96,7 +118,7 @@ async function submitForm() {
 
         showToast(`Paciente ${mode === 'create' ? 'registrado' : 'actualizado'} con éxito`, 'success');
         closeModal();
-        renderPatients([data]); // Mostramos el último editado en la tabla
+        loadDashboard(); // Refrescamos lista completa y KPIs en lugar de 1 solo
         
     } catch (error) {
         showToast(error.message, 'error');
@@ -114,7 +136,7 @@ async function deletePatient(rut) {
         const res = await fetch(`${API_BASE}/${rut}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Error al eliminar paciente');
         showToast('Ficha de paciente eliminada correctamente', 'success');
-        fetchPatients(); // Recargar default view
+        loadDashboard(); // Recargar default view
     } catch (error) {
         showToast(error.message, 'error');
     }
@@ -128,6 +150,18 @@ async function deletePatient(rut) {
 function renderPatients(patients) {
     const tbody = document.getElementById('patients-table-body');
     tbody.innerHTML = '';
+
+    if (patients.length === 0) {
+        tbody.innerHTML = `
+        <tr>
+            <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                <i data-lucide="users" class="w-8 h-8 mx-auto mb-2 text-gray-400"></i>
+                <p>No se encontraron registros para los filtros seleccionados.</p>
+            </td>
+        </tr>`;
+        lucide.createIcons();
+        return;
+    }
 
     patients.forEach(p => {
         const tr = document.createElement('tr');

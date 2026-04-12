@@ -28,12 +28,63 @@
         <div class="flex justify-between items-center mb-6">
             <div>
                 <h1 class="text-2xl font-semibold text-gray-900">Pacientes Registrados</h1>
-                <p class="text-sm text-gray-500">Gestione las fichas de los pacientes que asisten al consultorio.</p>
+                <p class="text-sm text-gray-500">Gestione y analice las fichas de los pacientes que asisten al consultorio.</p>
             </div>
             <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-sm font-medium flex items-center space-x-2 transition">
                 <i data-lucide="plus" class="w-4 h-4"></i>
                 <span>Nuevo Paciente</span>
             </button>
+        </div>
+
+        <!-- Dashboard KPIs -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 flex items-center space-x-4">
+                <div class="p-3 bg-blue-100 text-blue-600 rounded-full">
+                    <i data-lucide="users" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">Total Pacientes</p>
+                    <p id="kpi-total" class="text-2xl font-bold text-gray-900">0</p>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 flex items-center space-x-4">
+                <div class="p-3 bg-green-100 text-green-600 rounded-full">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">FONASA</p>
+                    <p id="kpi-fonasa" class="text-2xl font-bold text-gray-900">0</p>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 flex items-center space-x-4">
+                <div class="p-3 bg-purple-100 text-purple-600 rounded-full">
+                    <i data-lucide="briefcase-medical" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">ISAPRE</p>
+                    <p id="kpi-isapre" class="text-2xl font-bold text-gray-900">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtros y Controles -->
+        <div class="flex items-center space-x-4 mb-4 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+            <div class="flex items-center space-x-2">
+                <label class="text-sm font-medium text-gray-700">Filtro temporal:</label>
+                <select id="filter-time" onchange="loadDashboard()" class="text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-1.5">
+                    <option value="all">Historico Completo</option>
+                    <option value="today">Hoy</option>
+                    <option value="week">Esta Semana</option>
+                    <option value="month">Este Mes</option>
+                </select>
+            </div>
+            <div class="flex items-center space-x-2 border-l pl-4">
+                <label class="text-sm font-medium text-gray-700">Orden:</label>
+                <select id="filter-sort" onchange="loadDashboard()" class="text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-1.5">
+                    <option value="desc">Más Recientes Primero</option>
+                    <option value="asc">Más Antiguos Primero</option>
+                </select>
+            </div>
         </div>
 
         <!-- Table -->

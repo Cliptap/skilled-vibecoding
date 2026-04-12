@@ -6,6 +6,14 @@ from ..services.patient_service import PatientService
 router = APIRouter(prefix="/patients", tags=["patients"])
 service = PatientService()
 
+@router.get("/stats/kpis", status_code=status.HTTP_200_OK)
+def get_patient_stats(time_filter: str = 'all'):
+    return service.get_stats(time_filter)
+
+@router.get("/", response_model=List[PatientResponse], status_code=status.HTTP_200_OK)
+def list_patients(time_filter: str = 'all', sort: str = 'desc'):
+    return service.list_patients(time_filter, sort)
+
 @router.post("/", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
 def create_patient(patient: PatientCreate):
     existing = service.get_patient_by_rut(patient.rut)
