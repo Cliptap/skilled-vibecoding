@@ -1,11 +1,21 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from src.backend.api.patients import router as patients_router
 
 app = FastAPI(
     title="Consultorio API",
     description="API de gestión para fichas de pacientes. Gobernanza nivel Baja.",
     version="1.0.0"
+)
+
+# Configurar CORS para permitir que el Frontend consuma la API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permitir local
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Lista de IPs permitidas (Gobernanza de acceso requerida por PRD)

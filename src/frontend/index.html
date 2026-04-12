@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consultorio - Gestión de Pacientes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Iconos gratuitos de Heroicons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-50 font-sans antialiased text-gray-900">
+
+    <!-- Navbar -->
+    <nav class="bg-blue-600 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="stethoscope" class="w-6 h-6"></i>
+                    <span class="font-bold text-xl tracking-tight">Consultorio Vital</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header & Action -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-2xl font-semibold text-gray-900">Pacientes Registrados</h1>
+                <p class="text-sm text-gray-500">Gestione las fichas de los pacientes que asisten al consultorio.</p>
+            </div>
+            <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-sm font-medium flex items-center space-x-2 transition">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Nuevo Paciente</span>
+            </button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RUT</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paciente</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Previsión</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacto</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="patients-table-body" class="bg-white divide-y divide-gray-200">
+                    <!-- Filas inyectadas por JS -->
+                    <tr>
+                        <td colspan="5" class="px-6 py-4 text-center text-gray-500 text-sm">Cargando pacientes...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Modal Formulario -->
+    <div id="patient-modal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 id="modal-title" class="text-lg font-semibold text-gray-900">Registrar Paciente</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="px-6 py-4 overflow-y-auto">
+                <form id="patient-form" class="space-y-4">
+                    <!-- Modo (Crear o Editar) oculto -->
+                    <input type="hidden" id="form-mode" value="create">
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">RUT <span class="text-red-500">*</span></label>
+                        <input type="text" id="rut" required pattern="^[0-9]+-[0-9kK]$" placeholder="Ej: 12345678-9" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        <p class="text-xs text-gray-500 mt-1">Sin puntos, con guión.</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Nombres <span class="text-red-500">*</span></label>
+                            <input type="text" id="nombres" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Apellidos <span class="text-red-500">*</span></label>
+                            <input type="text" id="apellidos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Fecha de Nacimiento <span class="text-red-500">*</span></label>
+                            <input type="date" id="fecha_nacimiento" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Sexo <span class="text-red-500">*</span></label>
+                            <select id="sexo" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white">
+                                <option value="M">Masculino</option>
+                                <option value="F">Femenino</option>
+                                <option value="O">Otro</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Previsión <span class="text-red-500">*</span></label>
+                            <select id="prevision" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white">
+                                <option value="fonasa">FONASA</option>
+                                <option value="isapre">ISAPRE</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Teléfono</label>
+                            <input type="tel" id="telefono" placeholder="+569..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
+                        <input type="email" id="correo" placeholder="correo@ejemplo.com" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                    </div>
+                </form>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+                <button onclick="closeModal()" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition">Cancelar</button>
+                <button onclick="submitForm()" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition shadow-sm flex items-center">
+                    <span id="btn-submit-text">Guardar</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 space-y-3 z-50"></div>
+
+    <script src="app.js"></script>
+    <script>
+        // Inicializar íconos
+        lucide.createIcons();
+    </script>
+</body>
+</html>
