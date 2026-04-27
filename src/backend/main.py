@@ -1,43 +1,35 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from asgi_correlation_id import CorrelationIdMiddleware
+
+from src.database.database import engine, Base
 from src.backend.api.patients import router as patients_router
+from src.backend.api.secure_example import router as secure_router
+from src.backend.api.practitioners import router as practitioners_router
+from src.backend.api.appointments import router as appointments_router
+
+import src.database.events # Registra Soft Deletes y Auditoria
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
 
 app = FastAPI(
-    title="Consultorio API",
-    description="API de gestión para fichas de pacientes. Gobernanza nivel Baja.",
-    version="1.0.0"
+    title="VibeCoding Clinic API - Alta Gobernanza",
+    version="3.0.0",
+    lifespan=lifespan
 )
 
-# Configurar CORS para permitir que el Frontend consuma la API
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Permitir local
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CorrelationIdMiddleware)
 
-# Lista de IPs permitidas (Gobernanza de acceso requerida por PRD)
-# Por defecto se deja el localhost para entorno de pruebas/recepcionista
-ALLOWED_IPS = {"127.0.0.1", "::1", "testclient"}
-
-@app.middleware("http")
-async def ip_restriction_middleware(request: Request, call_next):
-    # Validar si el cliente está en la lista de IPs permitidas (manejando possible None en pruebas unitarias)
-    client_ip = request.client.host if request.client else "127.0.0.1"
-    
-    if client_ip not in ALLOWED_IPS:
-        return JSONResponse(
-            status_code=403,
-            content={"detail": "Acceso denegado: IP no autorizada."}
-        )
-    response = await call_next(request)
-    return response
-
-# Incluir Rutas
 app.include_router(patients_router)
+app.include_router(practitioners_router)
+app.include_router(appointments_router)
+app.include_router(secure_router)
 
-@app.get("/")
+@app.get("/health", tags=["system"])
 def health_check():
-    return {"status": "ok", "message": "Consultorio API Funcionando"}
+    return {"status": "healthy"}

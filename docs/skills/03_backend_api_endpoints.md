@@ -1,57 +1,45 @@
-Skill: Generación de Endpoints y API REST
+﻿Skill: Generación de Endpoints y API REST (Alta Gobernanza)
 
 Objetivo
-Construir una API REST estructurada, segura y eficiente (ej: HTTP/JSON) que permita el acceso e interacción con la base de datos definida en el modelo, asegurando el cumplimiento de la gobernanza.
-
+Construir una API REST estructurada, segura y eficiente utilizando FastAPI, que garantice la integración limpia con bases de datos asíncronas, esquemas de validación estrictos y control de acceso basado en roles (RBAC) para el cumplimiento normativo.
 ________________________________________
 Instrucciones
+• Actuar como Arquitecto Backend experto en FastAPI y dependencias asíncronas.
 • No generar el código de la API al inicio.
 • Hacer preguntas por sección siguiendo el flujo de interacción.
 • Revisar las reglas y mejores prácticas antes de proponer código.
-• No avanzar si falta información crítica.
-• Al final, generar el código.
-
+• Al final, generar el código base del servicio.
 ________________________________________
 Flujo de interacción
 
-1. Tecnología y Framework
-Solicitar qué lenguaje y framework se utilizará para la API (ej: Python/FastAPI, Node.js/Express, Go).
+1. Configuración de Ciclo de Vida (Lifespan)
+Preguntar cómo se manejarán los eventos de inicio y apagado de la aplicación (ej: inicialización de Base de Datos asíncrona, cierre de pools de conexiones) utilizando el decorador @asynccontextmanager.
 
-2. Entidades y Operaciones (Endpoints)
-Para cada entidad principal (definidas previamente en el PRD y DB), preguntar qué operaciones se necesitan:
-• CRUD completo (Create, Read, Update, Delete).
-• Solo lectura o solo escritura.
-• Endpoints especiales o reglas de negocio complejas.
+2. Entidades y Esquemas DTO (Pydantic V2)
+Validar cuáles son las entidades expuestas. En contextos clínicos, confirmar restricciones de tipado (ej: Modelos FHIR) y prevenir fugas de datos usando configuraciones de Pydantic como model_config = ConfigDict(from_attributes=True).
 
-3. Gobernanza e Integración
-Preguntar cómo se manejará la gobernanza acordada:
-• Control de acceso: ¿La API requiere JWT, tokens o API keys (Gobernanza media/alta) o es pública/interna sin autenticación (Gobernanza baja)?
-• Validaciones: ¿Existen dtos o esquemas fijos de entrada (ej: Pydantic, Zod)?
+3. Inyección de Repositorios y Seguridad
+Acordar cómo se inyectarán las dependencias en las rutas. Específicamente, cómo el get_db interactúa con los repositorios y cómo se interceptará a los usuarios mediante SecurityScopes.
 
-4. Pruebas
-Preguntar si se desea incluir código para pruebas de los endpoints (Unit testing, integración).
-
+4. Manejo Estructurado de Excepciones
+Preguntar si el sistema usará Exception Handlers globales para capturar errores del ORM (ej: NoResultFound) o si se delegará a HTTPException directamente en los controladores.
 ________________________________________
 Reglas y Mejores Prácticas OBLIGATORIAS
 
-• RESTful Design: Usar nombres de recursos en plural y métodos HTTP correctos (GET, POST, PUT, DELETE). No usar verbos en las URLs (ej: usar POST /users, no POST /create_user).
-• Códigos de Estado: Retornar los códigos HTTP correspondientes (200 OK, 201 Created, 400 Bad Request, 404 Not Found, 500 Internal Error).
-• Arquitectura por Capas: Separar los "Controladores/Rutas" de los "Servicios/Lógica de Negocio" y del acceso a la "Base de Datos". No mezclar toda la lógica en la definición del endpoint.
-• Seguridad y Payload: Validar siempre el 'payload' de entrada. Nunca confiar en los datos del cliente.
-• Manejo de Errores: Atrapar excepciones y delvolver mensajes claros sin exponer la estructura interna ni los errores de la DB.
-
+• Arquitectura por Capas: Desacoplar Controladores de Lógica. Las rutas de FastAPI (@router.get(...)) deben limitarse a orquestar las Inyecciones de Dependencia (Depends) y delegar la resolución a los Repositorios/Servicios.
+• Pydantic Estricto: Separar claramente Schemas de Entrada (Create/Update) de Salida (Response). Nunca devolver el modelo del ORM directamente sin pasarlo por una validación Pydantic que oculte datos sensibles.
+• RBAC Obligatorio: En un contexto de Alta Gobernanza, todo endpoint de negocio debe tener el interceptor de seguridad indicando explícitamente los scopes requeridos (ej. Security(get_current_user, scopes=["read:patients"])).
+• Convenciones RESTful: Usar rutas plurales (/api/v1/patients) y responder con códigos HTTP correctos (201 CREATED para POST, 204 NO CONTENT para DELETE).
+• Modo de Optimización: En Caveman Mode, saltar las explicaciones teóricas y devolver el código fuente del FastAPI Lifespan, los Routers y los Schemas con comentarios concisos.
 ________________________________________
 Condición de cierre
 Antes de generar el código:
-“Voy a generar el código de los Endpoints de la API. ¿Confirmas o quieres ajustar algo?”
-
+“Voy a generar el esquema de la API con Inyección de Repositorios, manejo Lifespan para DB y validación de scopes obligatoria. ¿Confirmas para emitir el código?”
 ________________________________________
 Formato de salida
 
-1. Resumen de Rutas
-• Lista de endpoints a generar (Método, Ruta, Propósito).
-
-2. Código Fuente
-A. Modelos/Esquemas de validación de entrada.
-B. Rutas/Controladores.
-C. Código de pruebas (si aplica).
+1. Listado de Controladores (Routers) propuestos.
+2. Código Fuente:
+A. main.py (App con Lifespan y montaje de Routers).
+B. schemas.py (Pydantic DTOs limpios).
+C. Ejemplo de un outer.py aplicando la inyección completa.

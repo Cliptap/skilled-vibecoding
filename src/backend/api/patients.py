@@ -1,55 +1,49 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, status
-from ..schemas.patient import PatientCreate, PatientUpdate, PatientResponse
-from ..services.patient_service import PatientService
+from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, Security, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.database.database import get_db
+from src.database.models import Patient
+from src.database.repository import BaseRepository
+from src.backend.schemas import PatientCreate, PatientResponse
+from src.backend.security.dependencies import get_current_user, TokenData
 
-router = APIRouter(prefix="/patients", tags=["patients"])
-service = PatientService()
+router = APIRouter(prefix="/api/v1/patients", tags=["patients"])
 
-@router.get("/stats/kpis", status_code=status.HTTP_200_OK)
-def get_patient_stats(time_filter: str = 'all'):
-    return service.get_stats(time_filter)
-
-@router.get("/", response_model=List[PatientResponse], status_code=status.HTTP_200_OK)
-def list_patients(time_filter: str = 'all', sort: str = 'desc'):
-    return service.list_patients(time_filter, sort)
+def get_patient_repo(db: AsyncSession = Depends(get_db)) -> BaseRepository[Patient]:
+    return BaseRepository(Patient, db)
 
 @router.post("/", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
-def create_patient(patient: PatientCreate):
-    existing = service.get_patient_by_rut(patient.rut)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Ya existe un paciente registrado con este RUT"
-        )
-    return service.create_patient(patient)
+async def create_patient(
+    patient_in: PatientCreate,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])],
+    repo: BaseRepository[Patient] = Depends(get_patient_repo)
+):
+    new_patient = await repo.create(patient_in.model_dump())
+    return new_patient
 
-@router.get("/{rut}", response_model=PatientResponse, status_code=status.HTTP_200_OK)
-def get_patient(rut: str):
-    patient = service.get_patient_by_rut(rut)
+@router.get("/{patient_id}", response_model=PatientResponse)
+async def get_patient(
+    patient_id: str,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:read"])],
+    repo: BaseRepository[Patient] = Depends(get_patient_repo)
+):
+    patient = await repo.get(patient_id)
     if not patient:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Paciente no encontrado"
+            detail="Paciente no encontrado o eliminado"
         )
     return patient
 
-@router.put("/{rut}", response_model=PatientResponse, status_code=status.HTTP_200_OK)
-def update_patient(rut: str, patient_update: PatientUpdate):
-    patient = service.update_patient(rut, patient_update)
-    if not patient:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Paciente no encontrado para actualizar"
-        )
-    return patient
-
-@router.delete("/{rut}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_patient(rut: str):
-    success = service.delete_patient(rut)
+@router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_patient(
+    patient_id: str,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])],
+    repo: BaseRepository[Patient] = Depends(get_patient_repo)
+):
+    success = await repo.soft_delete(patient_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Paciente no encontrado para eliminar"
+            detail="Error: Paciente no existe en base activa."
         )
-    return

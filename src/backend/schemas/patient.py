@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, EmailStr, validator
+from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
 from datetime import date
 from typing import Optional
 from enum import Enum
@@ -23,7 +23,8 @@ class PatientBase(BaseModel):
     telefono: Optional[str] = None
     prevision: PrevisionEnum
 
-    @validator('rut')
+    @field_validator('rut')
+    @classmethod
     def validar_rut(cls, v):
         if not re.match(r'^[0-9]+-[0-9kK]$', v):
             raise ValueError('Formato de RUT inválido. Debe ser números, un guión y el dígito verificador.')
@@ -44,5 +45,4 @@ class PatientResponse(PatientBase):
     created_at: str
     updated_at: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
