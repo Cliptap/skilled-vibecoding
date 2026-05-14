@@ -24,6 +24,14 @@ async def create_appointment(
     repo = AppointmentRepository(db)
     return await repo.create(appointment_in.model_dump())
 
+@router.get("/", response_model=list[AppointmentResponse])
+async def get_all_appointments(
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:read"])],
+    db: AsyncSession = Depends(get_db)):
+    repo = AppointmentRepository(db)
+    appointments = await repo.get_all()
+    return list(appointments)
+
 @router.get("/{appointment_id}", response_model=AppointmentResponse)
 async def get_appointment(
     appointment_id: str, 
@@ -34,3 +42,13 @@ async def get_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
     return appointment
+
+@router.delete("/{appointment_id}/", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_appointment(
+    appointment_id: str,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])],
+    db: AsyncSession = Depends(get_db)):
+    repo = AppointmentRepository(db)
+    success = await repo.soft_delete(appointment_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Appointment no encontrada")

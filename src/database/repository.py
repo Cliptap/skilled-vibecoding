@@ -12,12 +12,18 @@ class BaseRepository(Generic[T]):
         self.session = session
 
     async def get(self, id: str) -> Optional[T]:
-        stmt = select(self.model).where(getattr(self.model, "id") == id)
+        stmt = select(self.model).where(
+            getattr(self.model, "id") == id,
+            getattr(self.model, "is_deleted") == False
+        )
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
     async def get_all(self) -> Sequence[T]:
-        stmt = select(self.model)
+        if hasattr(self.model, "is_deleted"):
+            stmt = select(self.model).where(self.model.is_deleted == False)
+        else:
+            stmt = select(self.model)
         result = await self.session.execute(stmt)
         return result.scalars().all()
 

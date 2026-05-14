@@ -21,6 +21,14 @@ async def create_patient(
     new_patient = await repo.create(patient_in.model_dump())
     return new_patient
 
+@router.get("/", response_model=list[PatientResponse])
+async def get_all_patients(
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:read"])],
+    repo: BaseRepository[Patient] = Depends(get_patient_repo)
+):
+    patients = await repo.get_all()
+    return list(patients)
+
 @router.get("/{patient_id}", response_model=PatientResponse)
 async def get_patient(
     patient_id: str,

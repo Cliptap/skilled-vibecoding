@@ -1,4 +1,4 @@
-﻿Skill: Orquestación y Despliegue en Contenedores (Docker + Docker Compose)
+Skill: Orquestación y Despliegue en Contenedores (Docker + Docker Compose)
 
 Objetivo
 Contenedorizar los servicios del proyecto de manera eficiente, segura y estructurada, garantizando consistencia y replicabilidad en los entornos de desarrollo, pruebas y producción.
@@ -25,6 +25,7 @@ Acordar qué elementos requerirán volúmenes persistentes en el disco de la má
 ________________________________________
 Reglas y Mejores Prácticas OBLIGATORIAS
 
+• Auditoría de Capas (Full-Stack Awareness): Escanea el directorio `/src/` completo. Todo subdirectorio que contenga código ejecutable o vistas (ej. `backend/`, `frontend/`, `analytics/`) DEBE tener una estrategia de despliegue y un contenedor asignado en el `docker-compose.yml`. Si encuentras una carpeta huérfana, dockerízala.
 • Eficiencia de Caché: Agrupar la copia de archivos de requerimientos primero, instalar las dependencias y LUEGO copiar el código base para aprovechar la caché de capas de Docker en compilaciones frecuentes.
 • Seguridad de Ejecución: Jamás permitir que la aplicación dentro del entorno de producción se ejecute con el usuario de super administrador (root). Declarar siempre la directiva USER.
 • Variables de Entorno Seguras: Estructurar variables en archivos granulares (.env) y pasarlas de forma segura al contenedor; sin exponer credenciales en construcción estática (ARG/ENV hardcodeados).
