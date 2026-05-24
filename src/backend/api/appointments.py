@@ -19,14 +19,14 @@ class AppointmentRepository(BaseRepository[Appointment]):
 @router.post("/", response_model=AppointmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_appointment(
     appointment_in: AppointmentCreate, 
-    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])],
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["appointments:write"])],
     db: AsyncSession = Depends(get_db)):
     repo = AppointmentRepository(db)
     return await repo.create(appointment_in.model_dump())
 
 @router.get("/", response_model=list[AppointmentResponse])
 async def get_all_appointments(
-    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:read"])],
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["appointments:read"])],
     db: AsyncSession = Depends(get_db)):
     repo = AppointmentRepository(db)
     appointments = await repo.get_all()
@@ -35,7 +35,7 @@ async def get_all_appointments(
 @router.get("/{appointment_id}", response_model=AppointmentResponse)
 async def get_appointment(
     appointment_id: str, 
-    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:read"])],
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["appointments:read"])],
     db: AsyncSession = Depends(get_db)):
     repo = AppointmentRepository(db)
     appointment = await repo.get(appointment_id)
@@ -46,7 +46,7 @@ async def get_appointment(
 @router.delete("/{appointment_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_appointment(
     appointment_id: str,
-    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])],
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["appointments:write"])],
     db: AsyncSession = Depends(get_db)):
     repo = AppointmentRepository(db)
     success = await repo.soft_delete(appointment_id)

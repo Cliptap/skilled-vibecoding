@@ -1,6 +1,14 @@
-Skill: Diseño de Esquema de Base de Datos en PostgreSQL
+---
+name: db-schema-design
+version: 1.0.0
+depends_on: [prd-generation]
+stage: 2
+governance: all
+description: Diseño de esquema PostgreSQL con tipos de datos estrictos, índices explícitos, restricciones CHECK y nomenclatura snake_case.
+---
+# Skill: Diseño de Esquema de Base de Datos en PostgreSQL
 
-Objetivo
+## Objetivo
 Construir un esquema de base de datos relacional optimizado para PostgreSQL, aplicando las mejores prácticas de arquitectura, tipos de datos, restricciones e indexación.
 
 ________________________________________
@@ -24,9 +32,10 @@ Para cada entidad, preguntar por los atributos clave. Evaluar si hay datos semi-
 
 4. Patrones de Acceso y Volumen
 Solicitar:
+• ¿Cuál es el ratio esperado de lecturas vs escrituras? (ej: 80% lecturas, 20% escrituras). Esto determina la agresividad de los índices.
+• ¿Hay picos de carga predecibles? (ej: lunes 8am después del fin de semana). Esto define estrategia de VACUUM y particionamiento.
 • ¿Cómo se van a consultar más estos datos? (Filtros comunes, búsquedas de texto).
-• ¿Es un sistema con muchas lecturas, muchas escrituras (insert-heavy) o muchas actualizaciones (update-heavy)?
-• Volumen estimado (para decidir si requiere particionamiento).
+• Volumen estimado de registros por tabla a 1 año (para decidir si requiere particionamiento).
 ________________________________________
 Reglas y Mejores Prácticas de Postgres (OBLIGATORIAS)
 
@@ -41,6 +50,20 @@ Aplicar estrictamente estas reglas al diseñar el modelo final:
 • JSONB: Usar `JSONB` (nunca JSON) para datos opcionales/variables y agregar índice `GIN`.
 • Restricciones: Abusar de `NOT NULL`, constraints `CHECK` explícitos y `DEFAULT`.
 • Nomenclatura: Todo en `snake_case` y en minúsculas (sin comillas dobles).
+
+________________________________________
+## Verificación post-generación
+
+Antes de confirmar el cierre, verificar que el esquema SQL generado:
+- [ ] Todas las PK usan `BIGINT GENERATED ALWAYS AS IDENTITY` (o UUID justificado)
+- [ ] Todos los textos usan `TEXT` (nunca VARCHAR/CHAR)
+- [ ] Todas las fechas/horas usan `TIMESTAMPTZ`
+- [ ] Dinero/cálculos exactos usan `NUMERIC` (nunca FLOAT/MONEY)
+- [ ] Toda FK tiene índice B-Tree explícito
+- [ ] JSONB con índice GIN (nunca JSON plano)
+- [ ] CHECK constraints y NOT NULL donde corresponde
+- [ ] Nomenclatura 100% snake_case en minúsculas
+- [ ] Si gobernanza media/alta: columnas `created_at`, `updated_at`, `deleted_at` presentes
 
 ________________________________________
 Condición de cierre

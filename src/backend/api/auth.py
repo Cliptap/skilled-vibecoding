@@ -1,36 +1,77 @@
 from datetime import timedelta
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, Security, status
+from fastapi.security import OAuth2PasswordRequestForm, SecurityScopes
+from pydantic import BaseModel
 from src.backend.security.auth import create_access_token, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
+from src.backend.security.dependencies import get_current_user, TokenData
+from src.backend.services.user_service import get_user_by_email, get_all_users, create_user, delete_user
 
 router = APIRouter(tags=["auth"])
 
-# Mock de base de datos de usuarios para el MVP de Alta Gobernanza
-# En un sistema real esto vendría de la base de datos
-FAKE_USERS_DB = {
-    "admin@clinic.com": {
-        "username": "admin@clinic.com",
-        "hashed_password": "$2b$12$EdsBxPpHdZjTyHLl4h1RvO6PF5w.4TZoUoWQxS1vjJGJ7iwnAzK0y", # 'admin123'
-        "scopes": ["admin:all", "patients:read", "appointments:write", "appointments:read"],
-    }
-}
+class UserOut(BaseModel):
+    email: str
+    full_name: str
+    role: str
+    scopes: list[str]
+
+class UserCreate(BaseModel):
+    email: str
+    full_name: str
+    role: str
+    password: str
 
 @router.post("/token")
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ):
-    user = FAKE_USERS_DB.get(form_data.username)
+    user = get_user_by_email(form_data.username)
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["username"], "scopes": user["scopes"]},
+        data={
+            "sub": user["email"],
+            "full_name": user.get("full_name", ""),
+            "role": user.get("role", ""),
+            "scopes": user["scopes"]
+        },
         expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/api/v1/users", response_model=list[UserOut])
+async def list_users(
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])]
+):
+    return get_all_users()
+
+
+@router.post("/api/v1/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def register_user(
+    data: UserCreate,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])]
+):
+    if data.role not in ("admin", "medico", "secretaria"):
+        raise HTTPException(status_code=400, detail="Rol inválido. Usar: admin, medico, secretaria")
+    user = create_user(data.email, data.full_name, data.role, data.password)
+    if not user:
+        raise HTTPException(status_code=409, detail="El usuario ya existe")
+    return user
+
+
+@router.delete("/api/v1/users/{email}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_user(
+    email: str,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])]
+):
+    if email == current_user.username:
+        raise HTTPException(status_code=400, detail="No puedes eliminar tu propio usuario")
+    if not delete_user(email):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")

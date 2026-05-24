@@ -15,7 +15,7 @@ def get_patient_repo(db: AsyncSession = Depends(get_db)) -> BaseRepository[Patie
 @router.post("/", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
 async def create_patient(
     patient_in: PatientCreate,
-    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])],
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:write"])],
     repo: BaseRepository[Patient] = Depends(get_patient_repo)
 ):
     new_patient = await repo.create(patient_in.model_dump())
@@ -46,7 +46,7 @@ async def get_patient(
 @router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_patient(
     patient_id: str,
-    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])],
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:write"])],
     repo: BaseRepository[Patient] = Depends(get_patient_repo)
 ):
     success = await repo.soft_delete(patient_id)

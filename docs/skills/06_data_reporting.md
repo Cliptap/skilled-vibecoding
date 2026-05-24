@@ -1,6 +1,14 @@
-Skill: Definición de Reportería (Métricas y Consultas SQL Avanzadas)
+---
+name: data-reporting
+version: 1.0.0
+depends_on: [db-schema-design]
+stage: 5
+governance: all
+description: Creación de consultas SQL analíticas, vistas materializadas y reportes con trazabilidad según nivel de gobernanza.
+---
+# Skill: Definición de Reportería (Métricas y Consultas SQL Avanzadas)
 
-Objetivo
+## Objetivo
 Crear las consultas estructuradas, vistas en la base de datos (VIEWS, MATERIALIZED VIEWS) y paneles de información que procesen los datos recolectados para generar reportes analíticos para los tomadores de decisiones. Cumpliendo requerimientos previos del PRD, sobre trazabilidad y fechas de los registros (según el nivel de gobernanza).
 
 ________________________________________
@@ -14,6 +22,15 @@ Instrucciones
 ________________________________________
 Flujo de interacción
 
+0. Nivel de Gobernanza Heredado
+Confirmar el nivel definido en el PRD (Skill 01) antes de diseñar los reportes:
+- **Baja:** Reportes planos sin restricciones de acceso. Sin columnas de auditoría.
+- **Media:** Reportes deben exponer `created_at`, `updated_at`. Filtros por rango de fechas con zona horaria. Log de consultas ejecutadas.
+- **Alta:** Reportes incluyen `created_by`, `updated_by`. Vistas materializadas con política de refresco documentada. Trazabilidad de quién ejecutó cada reporte y cuándo.
+
+Si la skill 01 (PRD) no se ha ejecutado, preguntar: "¿Qué nivel de gobernanza se definió? Esto afecta qué columnas de auditoría deben aparecer en los reportes."
+
+________________________________________
 1. Indicadores (KPIs) y Propósito del Análisis
 Solicitar cuáles son los reportes que se buscan resolver (ej: Cantidad de Pacientes Totales por Semana, Proporción de Previsiones de Salud, Ingresos vs Costos).
 Pregunte al usuario cuáles son los KPI (Key Performance Indicators) a destacar más fundamentales para el Dashboard/Reporte principal.
@@ -37,6 +54,18 @@ Reglas y Mejores Prácticas (OBLIGATORIAS)
 • Optimizaciones: Utilizar `MATERIALIZED VIEWS` si las vistas tardan muchos segundos/minutos. Pre-calcular todo reporte grande.
 • Sin "SELECT *": Reportar exclusivamente los campos que componen la estadística.
 • Legibilidad SQL Analítico: Usar sentencias `WITH` en mayúsculas y en bloques legibles de 1 nivel a la vez. Añadir comentarios `/* ... */` sobre las transformaciones matemáticas aplicadas.
+
+________________________________________
+## Verificación post-generación
+
+Antes de confirmar el cierre, verificar que el SQL de reportería generado:
+- [ ] Usa VIEWS o CTEs (`WITH`) en lugar de lógica en memoria (Python/Node)
+- [ ] `MATERIALIZED VIEWS` para consultas pesadas, con política de refresco documentada
+- [ ] Sin `SELECT *` — solo las columnas necesarias para el KPI
+- [ ] Bloques `WITH` legibles, un nivel a la vez, con comentarios `/* ... */`
+- [ ] WINDOW functions donde aplique (`ROW_NUMBER`, `RANK`, `LAG`, `LEAD`)
+- [ ] Si gobernanza media/alta: columnas `created_at`, `updated_at`, `created_by` expuestas
+- [ ] Formato de salida definido: endpoint JSON, vista SQL, o export CSV/Excel
 
 ________________________________________
 Condición de cierre

@@ -1,621 +1,347 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 
 const apiBase = 'http://localhost:8000/api/v1'
 const token = ref(localStorage.getItem('token'))
-const username = ref('')
+const currentUser = ref(null)
+const selectedRole = ref(null)
+const credentialEmail = ref('')
 const password = ref('')
 const isLoading = ref(false)
 const toast = ref({ show: false, msg: '', type: 'success' })
 
-const activeTab = ref('dashboard')
+const activeTab = ref('inicio')
 const patients = ref([])
 const practitioners = ref([])
 const appointments = ref([])
+const users = ref([])
 
-// Modals
 const showModal = ref(false)
-const modalType = ref('patient') // 'patient' | 'practitioner' | 'appointment'
+const modalType = ref('patient')
+const searchQuery = ref('')
 
 const newPatient = ref({ identifier: '', name: '' })
 const newPractitioner = ref({ identifier: '', name: '', specialty: '', telecom: '' })
-const newAppointment = ref({ patient_id: '', practitioner_id: '', start_time: '', end_time: '', status: 'booked' })
+const newAppointment = ref({ patient_id: '', practitioner_id: '', start_time: '', end_time: '', status: 'agendada' })
+const newUser = ref({ email: '', full_name: '', role: 'secretaria', password: '' })
 
-// RUT formatting: auto-inserts hyphen before last char, allows only digits + K
-const formatRut = (raw) => {
-  // Strip everything except digits and K
-  const clean = raw.replace(/[^0-9kK]/g, '').toUpperCase()
-  if (clean.length <= 1) return clean
-  return clean.slice(0, -1) + '-' + clean.slice(-1)
-}
-const handleRutInput = (e, model, field) => {
-  model[field] = formatRut(e.target.value)
-  // Keep cursor at end
-  const input = e.target
-  const len = input.value.length
-  setTimeout(() => input.setSelectionRange(len, len), 0)
-}
+const roles = [
+  { id: 'admin', label: 'Administrador', email: 'admin@clinic.com', pwd: 'admin123', icon: 'admin_panel_settings', color: 'emerald', desc: 'Acceso total al sistema. Gestiona pacientes, profesionales, citas y usuarios.' },
+  { id: 'medico', label: 'Médico', email: 'medico@clinic.com', pwd: 'admin123', icon: 'stethoscope', color: 'blue', desc: 'Ve sus citas del día, consulta fichas de pacientes y agenda nuevas consultas.' },
+  { id: 'secretaria', label: 'Secretaria', email: 'secretaria@clinic.com', pwd: 'admin123', icon: 'person_add', color: 'violet', desc: 'Registra pacientes, agenda citas y gestiona la agenda diaria del consultorio.' }
+]
 
-const showToast = (msg, type = 'success') => {
-  toast.value = { show: true, msg, type }
-  setTimeout(() => toast.value.show = false, 4000)
-}
+const roleLabel = computed(() => {
+  if (!currentUser.value) return ''
+  const map = { admin: 'Administrador', medico: 'Médico', secretaria: 'Secretaria' }
+  return map[currentUser.value.role] || ''
+})
+const canWritePatients = computed(() => currentUser.value?.scopes?.includes('patients:write') || currentUser.value?.scopes?.includes('admin:all'))
+const canWriteAppointments = computed(() => currentUser.value?.scopes?.includes('appointments:write') || currentUser.value?.scopes?.includes('admin:all'))
+const canWritePractitioners = computed(() => currentUser.value?.scopes?.includes('practitioners:write') || currentUser.value?.scopes?.includes('admin:all'))
 
-const openModal = (type) => {
-  modalType.value = type
-  showModal.value = true
-}
+const formatRut = (raw) => { const clean = raw.replace(/[^0-9kK]/g, '').toUpperCase(); if (clean.length <= 1) return clean; return clean.slice(0, -1) + '-' + clean.slice(-1) }
+const handleRutInput = (e, model, field) => { model[field] = formatRut(e.target.value); const input = e.target; const len = input.value.length; setTimeout(() => input.setSelectionRange(len, len), 0) }
+const showToast = (msg, type = 'success') => { toast.value = { show: true, msg, type }; setTimeout(() => toast.value.show = false, 4000) }
+const decodeJwt = (t) => { try { return JSON.parse(atob(t.split('.')[1])) } catch { return null } }
 
-// Auth
+const selectRole = (role) => { selectedRole.value = role.id; credentialEmail.value = role.email; password.value = role.pwd }
+
 const login = async () => {
+  if (!credentialEmail.value || !password.value) { showToast('Selecciona un rol e ingresa la contraseña', 'error'); return }
   isLoading.value = true
   try {
-    const params = new URLSearchParams()
-    params.append('username', username.value)
-    params.append('password', password.value)
+    const params = new URLSearchParams(); params.append('username', credentialEmail.value); params.append('password', password.value)
     const response = await axios.post('http://localhost:8000/token', params)
-    token.value = response.data.access_token
-    localStorage.setItem('token', token.value)
-    showToast('Sesión iniciada correctamente')
-    fetchData()
-  } catch {
-    showToast('Credenciales inválidas', 'error')
-  } finally {
-    isLoading.value = false
-  }
+    token.value = response.data.access_token; localStorage.setItem('token', token.value)
+    const payload = decodeJwt(token.value)
+    if (payload) currentUser.value = { email: payload.sub, fullName: payload.full_name || payload.sub, role: payload.role || 'admin', scopes: payload.scopes || [] }
+    showToast('Sesión iniciada'); fetchData(); if (payload.role === 'admin') fetchUsers()
+  } catch { showToast('Credenciales inválidas', 'error') }
+  finally { isLoading.value = false }
 }
 
-const logout = () => {
-  token.value = null
-  localStorage.removeItem('token')
-}
-
+const logout = () => { token.value = null; currentUser.value = null; selectedRole.value = null; credentialEmail.value = ''; password.value = ''; localStorage.removeItem('token'); activeTab.value = 'inicio' }
 const authHeaders = () => ({ headers: { Authorization: `Bearer ${token.value}` } })
 
-// Fetch all data
 const fetchData = async () => {
-  if (!token.value) return
-  isLoading.value = true
+  if (!token.value) return; isLoading.value = true
   try {
-    const [pRes, prRes, aRes] = await Promise.all([
-      axios.get(`${apiBase}/patients/`, authHeaders()),
-      axios.get(`${apiBase}/practitioners/`, authHeaders()),
-      axios.get(`${apiBase}/appointments/`, authHeaders())
-    ])
-    patients.value = pRes.data
-    practitioners.value = prRes.data
-    appointments.value = aRes.data
-  } catch (err) {
-    if (err.response?.status === 401) logout()
-    else showToast('Error sincronizando datos', 'error')
-  } finally {
-    isLoading.value = false
-  }
+    const reqs = []
+    reqs.push((currentUser.value?.scopes?.includes('patients:read') || currentUser.value?.scopes?.includes('admin:all')) ? axios.get(`${apiBase}/patients/`, authHeaders()) : Promise.resolve({ data: [] }))
+    reqs.push((currentUser.value?.scopes?.includes('practitioners:read') || currentUser.value?.scopes?.includes('admin:all')) ? axios.get(`${apiBase}/practitioners/`, authHeaders()) : Promise.resolve({ data: [] }))
+    reqs.push((currentUser.value?.scopes?.includes('appointments:read') || currentUser.value?.scopes?.includes('admin:all')) ? axios.get(`${apiBase}/appointments/`, authHeaders()) : Promise.resolve({ data: [] }))
+    const [pRes, prRes, aRes] = await Promise.all(reqs)
+    patients.value = pRes.data; practitioners.value = prRes.data; appointments.value = aRes.data
+  } catch (err) { if (err.response?.status === 401) logout(); else showToast('Error al sincronizar datos', 'error') }
+  finally { isLoading.value = false }
 }
 
-// Create patient
+const fetchUsers = async () => { if (!currentUser.value?.scopes?.includes('admin:all')) return; try { const res = await axios.get(`${apiBase}/users`, authHeaders()); users.value = res.data } catch {} }
+
 const createPatient = async () => {
-  if (!newPatient.value.name || !newPatient.value.identifier) {
-    showToast('Nombre e Identificador requeridos', 'error'); return
-  }
+  if (!newPatient.value.name || !newPatient.value.identifier) { showToast('Nombre e identificador requeridos', 'error'); return }
   isLoading.value = true
-  try {
-    await axios.post(`${apiBase}/patients/`, {
-      id: `pat-${Date.now()}`,
-      identifier: newPatient.value.identifier.trim(),
-      name: newPatient.value.name.trim(),
-      birth_date: null
-    }, authHeaders())
-    showToast('Paciente registrado')
-    showModal.value = false
-    newPatient.value = { identifier: '', name: '' }
-    fetchData()
-  } catch (err) {
-    showToast(err.response?.data?.detail || 'Error al registrar paciente', 'error')
-  } finally { isLoading.value = false }
+  try { await axios.post(`${apiBase}/patients/`, { id: `pat-${Date.now()}`, identifier: newPatient.value.identifier.trim(), name: newPatient.value.name.trim(), birth_date: null }, authHeaders()); showToast('Paciente registrado'); showModal.value = false; newPatient.value = { identifier: '', name: '' }; fetchData() }
+  catch (err) { showToast(err.response?.data?.detail || 'Error al registrar paciente', 'error') }
+  finally { isLoading.value = false }
 }
 
-// Create practitioner
 const createPractitioner = async () => {
-  if (!newPractitioner.value.name || !newPractitioner.value.identifier) {
-    showToast('Nombre e Identificador requeridos', 'error'); return
-  }
+  if (!newPractitioner.value.name || !newPractitioner.value.identifier) { showToast('Nombre e identificador requeridos', 'error'); return }
   isLoading.value = true
-  try {
-    await axios.post(`${apiBase}/practitioners/`, {
-      id: `prac-${Date.now()}`,
-      identifier: newPractitioner.value.identifier.trim(),
-      name: newPractitioner.value.name.trim(),
-      specialty: newPractitioner.value.specialty || null,
-      telecom: newPractitioner.value.telecom || null
-    }, authHeaders())
-    showToast('Profesional registrado')
-    showModal.value = false
-    newPractitioner.value = { identifier: '', name: '', specialty: '', telecom: '' }
-    fetchData()
-  } catch (err) {
-    showToast(err.response?.data?.detail || 'Error al registrar profesional', 'error')
-  } finally { isLoading.value = false }
+  try { await axios.post(`${apiBase}/practitioners/`, { id: `prac-${Date.now()}`, identifier: newPractitioner.value.identifier.trim(), name: newPractitioner.value.name.trim(), specialty: newPractitioner.value.specialty || null, telecom: newPractitioner.value.telecom || null }, authHeaders()); showToast('Profesional registrado'); showModal.value = false; newPractitioner.value = { identifier: '', name: '', specialty: '', telecom: '' }; fetchData() }
+  catch (err) { showToast(err.response?.data?.detail || 'Error al registrar profesional', 'error') }
+  finally { isLoading.value = false }
 }
 
-// Create appointment
 const createAppointment = async () => {
-  if (!newAppointment.value.patient_id || !newAppointment.value.practitioner_id || !newAppointment.value.start_time || !newAppointment.value.end_time) {
-    showToast('Todos los campos son requeridos', 'error'); return
-  }
+  if (!newAppointment.value.patient_id || !newAppointment.value.practitioner_id || !newAppointment.value.start_time || !newAppointment.value.end_time) { showToast('Todos los campos son requeridos', 'error'); return }
   isLoading.value = true
-  try {
-    await axios.post(`${apiBase}/appointments/`, {
-      id: `apt-${Date.now()}`,
-      status: newAppointment.value.status,
-      start_time: new Date(newAppointment.value.start_time).toISOString(),
-      end_time: new Date(newAppointment.value.end_time).toISOString(),
-      patient_id: newAppointment.value.patient_id,
-      practitioner_id: newAppointment.value.practitioner_id
-    }, authHeaders())
-    showToast('Cita registrada')
-    showModal.value = false
-    newAppointment.value = { patient_id: '', practitioner_id: '', start_time: '', end_time: '', status: 'booked' }
-    fetchData()
-  } catch (err) {
-    showToast(err.response?.data?.detail || 'Error al registrar cita', 'error')
-  } finally { isLoading.value = false }
+  try { await axios.post(`${apiBase}/appointments/`, { id: `apt-${Date.now()}`, status: newAppointment.value.status, start_time: new Date(newAppointment.value.start_time).toISOString(), end_time: new Date(newAppointment.value.end_time).toISOString(), patient_id: newAppointment.value.patient_id, practitioner_id: newAppointment.value.practitioner_id }, authHeaders()); showToast('Cita registrada'); showModal.value = false; newAppointment.value = { patient_id: '', practitioner_id: '', start_time: '', end_time: '', status: 'agendada' }; fetchData() }
+  catch (err) { showToast(err.response?.data?.detail || 'Error al registrar cita', 'error') }
+  finally { isLoading.value = false }
 }
 
-// Delete patient (soft)
-const deleteRecord = async (id) => {
-  if (!confirm('¿Eliminar registro?')) return
-  const endpoint = activeTab.value === 'patients' ? 'patients' : activeTab.value === 'practitioners' ? 'practitioners' : 'appointments'
-  try {
-    await axios.delete(`${apiBase}/${endpoint}/${id}/`, authHeaders())
-    showToast('Registro eliminado')
-    fetchData()
-  } catch (err) {
-    showToast(err.response?.data?.detail || 'Error al eliminar', 'error')
-  }
+const deleteRecord = async (id, type) => { if (!confirm('¿Eliminar este registro?')) return; try { await axios.delete(`${apiBase}/${type}/${id}/`, authHeaders()); showToast('Registro eliminado'); fetchData() } catch (err) { showToast(err.response?.data?.detail || 'Error al eliminar', 'error') } }
+
+const createUser = async () => {
+  if (!newUser.value.email || !newUser.value.full_name || !newUser.value.password) { showToast('Todos los campos son requeridos', 'error'); return }
+  isLoading.value = true
+  try { await axios.post(`${apiBase}/users`, newUser.value, authHeaders()); showToast('Usuario creado'); showModal.value = false; newUser.value = { email: '', full_name: '', role: 'secretaria', password: '' }; fetchUsers() }
+  catch (err) { showToast(err.response?.data?.detail || 'Error al crear usuario', 'error') }
+  finally { isLoading.value = false }
 }
 
-onMounted(() => { if (token.value) fetchData() })
+const deleteUser = async (email) => { if (!confirm(`¿Eliminar usuario ${email}?`)) return; try { await axios.delete(`${apiBase}/users/${email}`, authHeaders()); showToast('Usuario eliminado'); fetchUsers() } catch (err) { showToast(err.response?.data?.detail || 'Error al eliminar usuario', 'error') } }
+
+const statusLabel = (s) => { const map = { agendada:'Agendada', confirmada:'Confirmada', en_curso:'En curso', completada:'Completada', cancelada:'Cancelada', no_asiste:'No asiste', booked:'Agendada', pending:'Pendiente', cancelled:'Cancelada' }; return map[s]||s }
+const statusColor = (s) => { const map = { agendada:'bg-blue-50 text-blue-700 border-blue-200', booked:'bg-blue-50 text-blue-700 border-blue-200', confirmada:'bg-emerald-50 text-emerald-700 border-emerald-200', en_curso:'bg-amber-50 text-amber-700 border-amber-200', completada:'bg-green-50 text-green-700 border-green-200', cancelada:'bg-red-50 text-red-700 border-red-200', cancelled:'bg-red-50 text-red-700 border-red-200', no_asiste:'bg-gray-50 text-gray-700 border-gray-200', pending:'bg-purple-50 text-purple-700 border-purple-200' }; return map[s]||'bg-gray-50 text-gray-700 border-gray-200' }
+
+const filteredPatients = computed(() => { if (!searchQuery.value) return patients.value; const q = searchQuery.value.toLowerCase(); return patients.value.filter(p => p.name?.toLowerCase().includes(q) || p.identifier?.toLowerCase().includes(q)) })
+const filteredPractitioners = computed(() => { if (!searchQuery.value) return practitioners.value; const q = searchQuery.value.toLowerCase(); return practitioners.value.filter(p => p.name?.toLowerCase().includes(q) || p.specialty?.toLowerCase().includes(q)) })
+const filteredAppointments = computed(() => { if (!searchQuery.value) return appointments.value; const q = searchQuery.value.toLowerCase(); return appointments.value.filter(a => a.patient_id?.toLowerCase().includes(q) || a.status?.toLowerCase().includes(q)) })
+const todayAppointments = computed(() => appointments.value.filter(a => { const d = new Date(a.start_time); const today = new Date(); return d.toDateString() === today.toDateString() }))
+
+onMounted(() => {
+  if (token.value) { const payload = decodeJwt(token.value); if (payload) { currentUser.value = { email: payload.sub, fullName: payload.full_name || payload.sub, role: payload.role || 'admin', scopes: payload.scopes || [] }; fetchData(); if (payload.role === 'admin') fetchUsers() } }
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-on-background font-body-md overflow-hidden selection:bg-surface-variant selection:text-on-surface flex flex-col">
-    
-    <!-- Login Screen -->
-    <div v-if="!token" class="flex-1 flex items-center justify-center p-6 bg-surface-container-lowest">
-      <div class="w-full max-w-[400px] glass-card p-8 rounded-xl shadow-sm">
-        <div class="flex flex-col items-center mb-8">
-          <div class="w-12 h-12 bg-primary-container rounded-lg flex items-center justify-center mb-4 text-on-primary">
-            <span class="material-symbols-outlined text-[28px]">clinical_notes</span>
-          </div>
-          <h1 class="font-headline-lg text-headline-lg text-on-surface">Clinical Central</h1>
-          <p class="font-label-caps text-label-caps text-on-surface-variant mt-2">Health Systems v2.4</p>
+<div class="min-h-screen bg-gray-50 text-gray-800 flex flex-col font-sans antialiased">
+
+<!-- ===== LOGIN ===== -->
+<div v-if="!token" class="flex-1 flex items-center justify-center p-6">
+  <div class="w-full max-w-2xl">
+    <div class="text-center mb-8">
+      <div class="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-3 text-emerald-700"><span class="material-symbols-outlined text-[32px]">clinical_notes</span></div>
+      <h1 class="text-2xl font-semibold text-gray-900">Consultorio Central</h1>
+      <p class="text-sm text-gray-500 mt-1">Sistema de gestión clínica — Demostración de roles</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+      <button v-for="role in roles" :key="role.id" @click="selectRole(role)" class="text-left p-4 rounded-xl border-2 transition-all" :class="selectedRole === role.id ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-9 h-9 rounded-lg flex items-center justify-center text-white" :class="role.color === 'emerald' ? 'bg-emerald-600' : role.color === 'blue' ? 'bg-blue-600' : 'bg-violet-600'"><span class="material-symbols-outlined text-[20px]">{{ role.icon }}</span></div>
+          <div><p class="text-sm font-semibold text-gray-900">{{ role.label }}</p><p class="text-[11px] text-gray-400 font-mono">{{ role.email }}</p></div>
         </div>
-          
-        <div class="space-y-4">
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Correo electrónico</label>
-            <input v-model="username" placeholder="admin@clinic.com" class="w-full bg-surface-container-lowest border border-outline-variant p-3 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline text-body-md" />
-          </div>
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Contraseña</label>
-            <input v-model="password" type="password" placeholder="••••••••" class="w-full bg-surface-container-lowest border border-outline-variant p-3 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline text-body-md" />
-          </div>
-          <button @click="login" :disabled="isLoading" class="w-full bg-primary text-on-primary hover:opacity-90 p-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 mt-2 shadow-md disabled:opacity-70 text-body-md">
-            <span v-if="isLoading" class="material-symbols-outlined animate-spin text-[20px]">refresh</span>
-            <span v-else>Iniciar Sesión</span>
-          </button>
-        </div>
+        <p class="text-[11px] text-gray-500 leading-relaxed">{{ role.desc }}</p>
+      </button>
+    </div>
+    <div v-if="selectedRole" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+      <div class="flex items-center justify-between"><span class="text-xs font-medium text-gray-400 uppercase tracking-wide">Credenciales</span><span class="text-[11px] text-gray-400 font-mono">contraseña: admin123</span></div>
+      <div class="flex gap-3">
+        <input :value="credentialEmail" readonly class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm bg-gray-50 text-gray-600 font-mono" />
+        <input v-model="password" type="password" placeholder="Contraseña" class="w-40 border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" />
+        <button @click="login" :disabled="isLoading || !password" class="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-50 shrink-0"><span v-if="isLoading" class="material-symbols-outlined animate-spin text-[18px]">refresh</span><span v-else>Ingresar como {{ roles.find(r => r.id === selectedRole)?.label }}</span></button>
       </div>
     </div>
-
-    <!-- Dashboard Shell -->
-    <div v-else class="flex flex-1 overflow-hidden">
-      <!-- SideNavBar Shell -->
-      <aside class="w-[280px] bg-surface-container-lowest border-r border-outline-variant/50 shadow-sm flex flex-col py-8 px-4 z-50 shrink-0">
-        <div class="mb-10 px-4">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary">
-              <span class="material-symbols-outlined text-[24px]">clinical_notes</span>
-            </div>
-            <div>
-              <h1 class="font-headline-md text-[20px] font-bold text-on-surface leading-tight">Clinical Central</h1>
-              <p class="font-label-caps text-[10px] text-on-surface-variant/70 tracking-widest">Health Systems v2.4</p>
-            </div>
-          </div>
-        </div>
-        
-        <nav class="flex-1 space-y-1">
-          <a @click.prevent="activeTab = 'dashboard'" href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200" :class="activeTab === 'dashboard' ? 'text-primary font-semibold border-r-4 border-primary bg-surface-container-low' : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-high'">
-            <span class="material-symbols-outlined">dashboard</span>
-            <span class="font-label-caps text-label-caps">Panel General</span>
-          </a>
-          <a @click.prevent="activeTab = 'patients'" href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200" :class="activeTab === 'patients' ? 'text-primary font-semibold border-r-4 border-primary bg-surface-container-low' : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-high'">
-            <span class="material-symbols-outlined">patient_list</span>
-            <span class="font-label-caps text-label-caps">Registros de Pacientes</span>
-          </a>
-          <a @click.prevent="activeTab = 'practitioners'" href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200" :class="activeTab === 'practitioners' ? 'text-primary font-semibold border-r-4 border-primary bg-surface-container-low' : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-high'">
-            <span class="material-symbols-outlined">stethoscope</span>
-            <span class="font-label-caps text-label-caps">Personal Médico</span>
-          </a>
-          <a @click.prevent="activeTab = 'appointments'" href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200" :class="activeTab === 'appointments' ? 'text-primary font-semibold border-r-4 border-primary bg-surface-container-low' : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-high'">
-            <span class="material-symbols-outlined">calendar_today</span>
-            <span class="font-label-caps text-label-caps">Citas Clínicas</span>
-          </a>
-          <a @click.prevent="activeTab = 'compliance'" href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200" :class="activeTab === 'compliance' ? 'text-primary font-semibold border-r-4 border-primary bg-surface-container-low' : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-high'">
-            <span class="material-symbols-outlined">gavel</span>
-            <span class="font-label-caps text-label-caps">Compliance & Audits</span>
-          </a>
-        </nav>
-        
-        <div class="mt-auto space-y-6">
-          <button @click="openModal(activeTab === 'practitioners' ? 'practitioner' : activeTab === 'appointments' ? 'appointment' : 'patient')" class="w-full py-3 bg-primary text-on-primary rounded-lg font-semibold flex items-center justify-center gap-2 shadow-lg shadow-primary/10 hover:opacity-90 transition-opacity">
-            <span class="material-symbols-outlined">add</span>
-            <span class="font-label-caps text-label-caps">Nuevo Registro</span>
-          </button>
-          
-          <div class="pt-6 border-t border-outline-variant/30 space-y-1">
-            <a class="flex items-center gap-3 px-4 py-2 rounded-lg text-error hover:bg-error-container/50 transition-colors cursor-pointer" @click.prevent="logout">
-              <span class="material-symbols-outlined">logout</span>
-              <span class="font-label-caps text-label-caps">Cerrar Sesión</span>
-            </a>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Main Content Area -->
-      <main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden relative">
-        <!-- TopAppBar Shell -->
-        <header class="flex justify-between items-center h-16 px-gutter w-full bg-surface-container-lowest/80 backdrop-blur-xl border-b border-outline-variant/30 sticky top-0 z-40 shrink-0">
-          <div class="flex items-center gap-6">
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant">search</span>
-              <input class="bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 w-80 text-body-md focus:ring-2 focus:ring-primary outline-none transition-shadow" placeholder="Buscar pacientes o sistemas..." type="text"/>
-            </div>
-          </div>
-          <div class="flex items-center gap-4">
-            <button @click="fetchData" class="w-10 h-10 rounded-full hover:bg-surface-variant/50 flex items-center justify-center text-on-surface transition-all" title="Actualizar datos">
-              <span class="material-symbols-outlined" :class="{ 'animate-spin': isLoading }">sync</span>
-            </button>
-            <button class="w-10 h-10 rounded-full hover:bg-surface-variant/50 flex items-center justify-center text-on-surface transition-all">
-              <span class="material-symbols-outlined">notifications</span>
-            </button>
-            <div class="h-8 w-[1px] bg-outline-variant/30"></div>
-            <div class="flex items-center gap-3">
-              <div class="text-right hidden lg:block">
-                <p class="text-body-sm font-semibold leading-tight">Admin System</p>
-                <p class="text-[10px] text-on-tertiary-container uppercase tracking-widest">Director Médico</p>
-              </div>
-              <div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-bold text-on-surface border border-outline-variant">A</div>
-            </div>
-          </div>
-        </header>
-
-        <!-- Dynamic Content Canvas -->
-        <div class="p-gutter flex-1 overflow-y-auto space-y-gutter">
-          
-          <div class="flex justify-between items-end mb-6">
-            <div>
-              <h2 class="font-headline-lg text-[28px] text-on-surface font-bold">
-                {{ activeTab === 'dashboard' ? 'Panel de Gobernanza' : activeTab === 'patients' ? 'Registros de Pacientes' : activeTab === 'practitioners' ? 'Personal Médico' : activeTab === 'appointments' ? 'Citas Clínicas' : 'Cumplimiento y Auditorías' }}
-              </h2>
-              <p class="text-on-surface-variant font-body-md mt-1">Monitoreo del sistema y registro de accesos.</p>
-            </div>
-            <div class="flex gap-3">
-              <button @click="fetchData" class="flex items-center gap-2 px-4 py-2 border border-outline rounded-lg text-body-sm font-semibold hover:bg-surface-container-high transition-colors">
-                <span class="material-symbols-outlined text-[18px]">download</span>
-                Exportar Datos
-              </button>
-            </div>
-          </div>
-
-          <!-- Dashboard specific widgets (Only shown when activeTab === dashboard) -->
-          <div v-if="activeTab === 'dashboard' || activeTab === 'compliance'" class="grid grid-cols-1 md:grid-cols-3 gap-gutter mb-6">
-            <!-- Active Sessions -->
-            <div class="glass-card p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div class="flex justify-between items-start mb-4">
-                <div class="w-12 h-12 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
-                  <span class="material-symbols-outlined">person_pin</span>
-                </div>
-                <span class="flex items-center text-[12px] font-bold text-secondary">
-                  <span class="material-symbols-outlined text-[16px] mr-1">trending_up</span> +2
-                </span>
-              </div>
-              <p class="text-on-tertiary-container font-label-caps text-label-caps">Sesiones Activas</p>
-              <h3 class="font-headline-lg text-headline-lg mt-1">14</h3>
-            </div>
-            
-            <!-- FHIR Sync Status -->
-            <div class="glass-card p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div class="flex justify-between items-start mb-4">
-                <div class="w-12 h-12 rounded-xl bg-secondary-fixed flex items-center justify-center text-secondary">
-                  <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">sync_alt</span>
-                </div>
-                <div class="px-2 py-1 bg-secondary-fixed/30 rounded text-[10px] font-bold text-secondary border border-secondary-fixed">HEALTHY</div>
-              </div>
-              <p class="text-on-tertiary-container font-label-caps text-label-caps">FHIR Sync Status</p>
-              <div class="flex items-baseline gap-2 mt-1">
-                <h3 class="font-headline-lg text-headline-lg">Stable</h3>
-                <span class="text-body-md text-secondary font-semibold">/ 99.9%</span>
-              </div>
-              <div class="mt-4 h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
-                <div class="h-full bg-secondary-container w-[99.9%]"></div>
-              </div>
-            </div>
-
-            <!-- Recent Access Logs -->
-            <div class="glass-card p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div class="flex justify-between items-start mb-4">
-                <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface">
-                  <span class="material-symbols-outlined">security_update_good</span>
-                </div>
-                <button class="material-symbols-outlined text-on-surface-variant">more_horiz</button>
-              </div>
-              <p class="text-on-tertiary-container font-label-caps text-label-caps">Registros de Acceso Recientes</p>
-              <h3 class="font-headline-lg text-headline-lg mt-1">1,240 <span class="text-body-md font-normal text-on-tertiary-container">hoy</span></h3>
-            </div>
-          </div>
-
-          <!-- Data Table Section -->
-          <section v-if="activeTab !== 'dashboard' && activeTab !== 'compliance'" class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 overflow-hidden shadow-sm">
-            <div class="px-6 py-5 border-b border-outline-variant/30 flex justify-between items-center">
-              <div>
-                <h4 class="font-headline-sm text-headline-sm text-on-surface">Registros del Sistema</h4>
-                <p class="text-body-sm text-on-surface-variant">Historial de interacción con registros electrónicos de salud en tiempo real.</p>
-              </div>
-              <div class="flex gap-2">
-                <div class="flex items-center bg-surface-container-low border border-outline-variant/50 rounded-lg px-3 py-1.5">
-                  <span class="material-symbols-outlined text-[18px] mr-2 text-on-surface-variant">filter_list</span>
-                  <span class="text-body-sm font-medium">Filtrar</span>
-                </div>
-              </div>
-            </div>
-            
-            <div class="overflow-x-auto">
-              <table class="w-full text-left border-collapse">
-                <thead>
-                  <tr class="bg-surface-container-low/50 border-b border-outline-variant/30">
-                    <th v-if="activeTab === 'patients'" class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider">ID Paciente</th>
-                    <th v-if="activeTab === 'patients'" class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider">Nombre Completo</th>
-                    <th v-if="activeTab === 'patients'" class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider">Identificador (RUT)</th>
-                    
-                    <th v-if="activeTab === 'practitioners'" class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider">Profesional</th>
-                    <th v-if="activeTab === 'practitioners'" class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider">Especialidad</th>
-                    
-                    <th v-if="activeTab === 'appointments'" class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider">Referencia Paciente</th>
-                    <th v-if="activeTab === 'appointments'" class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider">Estado</th>
-                    
-                    <th class="px-6 py-4 font-label-caps text-[11px] font-bold text-on-tertiary-container uppercase tracking-wider text-right">Acción</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-outline-variant/30">
-                  <tr v-for="item in (activeTab === 'patients' ? patients : activeTab === 'practitioners' ? practitioners : appointments)" :key="item.id" class="hover:bg-surface-container-low transition-colors group">
-                    
-                    <!-- Patients -->
-                    <td v-if="activeTab === 'patients'" class="px-6 py-4">
-                      <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded bg-surface-container-high flex items-center justify-center text-on-surface-variant">
-                          <span class="material-symbols-outlined text-[16px]">fingerprint</span>
-                        </div>
-                        <span class="font-data-mono text-[13px] font-medium">{{ item.id }}</span>
-                      </div>
-                    </td>
-                    <td v-if="activeTab === 'patients'" class="px-6 py-4">
-                      <div class="flex items-center gap-2">
-                        <div class="w-6 h-6 rounded-full bg-secondary-fixed flex items-center justify-center text-[10px] font-bold">{{ item.name ? item.name.charAt(0) : '?' }}</div>
-                        <span class="text-body-md font-medium text-on-surface">{{ item.name }}</span>
-                      </div>
-                    </td>
-                    <td v-if="activeTab === 'patients'" class="px-6 py-4 text-body-sm text-on-surface-variant font-data-mono">{{ item.identifier }}</td>
-                    
-                    <!-- Practitioners -->
-                    <td v-if="activeTab === 'practitioners'" class="px-6 py-4">
-                      <div class="flex items-center gap-2">
-                        <div class="w-6 h-6 rounded-full bg-primary-fixed flex items-center justify-center text-[10px] font-bold">{{ item.name ? item.name.charAt(0) : '?' }}</div>
-                        <span class="text-body-md font-medium text-on-surface">{{ item.name }}</span>
-                      </div>
-                    </td>
-                    <td v-if="activeTab === 'practitioners'" class="px-6 py-4 text-body-sm text-on-surface-variant">{{ item.specialty || 'General' }}</td>
-                    
-                    <!-- Appointments -->
-                    <td v-if="activeTab === 'appointments'" class="px-6 py-4 font-data-mono text-[13px] font-medium">{{ item.patient_id }}</td>
-                    <td v-if="activeTab === 'appointments'" class="px-6 py-4">
-                      <span v-if="item.status === 'booked'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-surface-variant text-on-surface border border-outline-variant/30 uppercase tracking-wider">Booked</span>
-                      <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-secondary-fixed/20 text-secondary border border-secondary-fixed/30 uppercase tracking-wider">{{ item.status }}</span>
-                    </td>
-
-                    <!-- Actions -->
-                    <td class="px-6 py-4 text-right">
-                      <div class="flex items-center justify-end">
-                        <button @click="deleteRecord(item.id)" class="material-symbols-outlined text-on-tertiary-container hover:text-error transition-colors text-[20px]" title="Eliminar">delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                  
-                  <tr v-if="!isLoading && ((activeTab === 'patients' && patients.length === 0) || (activeTab === 'practitioners' && practitioners.length === 0) || (activeTab === 'appointments' && appointments.length === 0))">
-                    <td colspan="5" class="px-6 py-16 text-center">
-                      <div class="flex flex-col items-center justify-center">
-                        <span class="material-symbols-outlined text-[48px] text-outline-variant mb-4">folder_open</span>
-                        <h3 class="text-[16px] font-medium text-on-surface">Sin registros encontrados</h3>
-                        <p class="text-sm text-on-surface-variant mt-1">No hay datos en esta sección aún.</p>
-                        <button @click="openModal(activeTab === 'practitioners' ? 'practitioner' : activeTab === 'appointments' ? 'appointment' : 'patient')" class="mt-4 text-sm text-secondary font-semibold hover:underline">Crear primer registro</button>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            
-            <div class="px-6 py-4 border-t border-outline-variant/30 flex justify-between items-center bg-surface-container-low/30">
-              <span class="text-body-sm text-on-surface-variant">Mostrando registros</span>
-              <div class="flex gap-2">
-                <button class="p-1.5 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low disabled:opacity-30" disabled>
-                  <span class="material-symbols-outlined text-[18px]">chevron_left</span>
-                </button>
-                <button class="p-1.5 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low">
-                  <span class="material-symbols-outlined text-[18px]">chevron_right</span>
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <!-- Governance specific detail grid -->
-          <div v-if="activeTab === 'dashboard' || activeTab === 'compliance'" class="grid grid-cols-1 lg:grid-cols-2 gap-gutter mt-6">
-            <div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/30">
-              <div class="flex justify-between items-center mb-6">
-                <h4 class="font-headline-sm text-headline-sm text-on-surface">Integridad de Datos</h4>
-                <span class="material-symbols-outlined text-on-tertiary-container">info</span>
-              </div>
-              <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                  <span class="text-body-md">Estado de Validación</span>
-                  <span class="text-body-md font-bold text-secondary">Verificado</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span class="text-body-md">Cumplimiento de Esquema</span>
-                  <span class="text-body-md font-bold text-secondary">100% (HL7 FHIR v4)</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span class="text-body-md">Nivel de Cifrado</span>
-                  <span class="text-body-md font-bold">AES-256-GCM</span>
-                </div>
-              </div>
-            </div>
-            <div class="bg-primary-container p-6 rounded-xl border border-outline-variant/30 text-on-primary">
-              <div class="flex items-center gap-3 mb-6">
-                <span class="material-symbols-outlined text-primary-fixed">admin_panel_settings</span>
-                <h4 class="font-headline-sm text-headline-sm">Aviso de Seguridad</h4>
-              </div>
-              <p class="text-on-primary-container text-body-md mb-6 leading-relaxed">
-                  Revisión periódica de gobernanza programada para mañana a las 09:00 AM. Asegúrese de que todos los registros de acceso marcados estén anotados y archivados antes del cierre del ciclo actual.
-              </p>
-              <button @click="activeTab = 'patients'" class="mt-6 w-full py-2 bg-primary-fixed text-primary font-bold rounded-lg hover:bg-white transition-colors">
-                  Ver Registros de Pacientes
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </main>
-    </div>
-
-    <!-- Modals -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary-container/40 backdrop-blur-sm">
-      <div class="bg-surface-container-lowest rounded-xl shadow-xl border border-outline-variant/30 w-full max-w-md overflow-hidden">
-        <div class="px-6 py-5 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-low">
-          <h3 class="text-[18px] font-semibold text-on-surface">
-            {{ modalType === 'practitioner' ? 'Nuevo Profesional' : modalType === 'appointment' ? 'Nueva Cita' : 'Nuevo Paciente' }}
-          </h3>
-          <button @click="showModal = false" class="text-on-surface-variant hover:text-on-surface transition-colors material-symbols-outlined">close</button>
-        </div>
-
-        <!-- Patient form -->
-        <div v-if="modalType === 'patient'" class="p-6 space-y-4">
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Nombre Completo</label>
-            <input v-model="newPatient.name" placeholder="Ej: Juan Pérez" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none text-body-md" />
-          </div>
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Identificador (RUT)</label>
-            <input
-              :value="newPatient.identifier"
-              @input="handleRutInput($event, newPatient, 'identifier')"
-              placeholder="12345678-9"
-              maxlength="10"
-              class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none text-body-md font-mono" />
-            <p v-if="newPatient.identifier && newPatient.identifier.length < 9" class="text-[11px] text-error mt-1">RUT incompleto (mínimo 7 dígitos + dígito verificador)</p>
-          </div>
-        </div>
-
-        <!-- Practitioner form -->
-        <div v-if="modalType === 'practitioner'" class="p-6 space-y-4">
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Nombre Completo</label>
-            <input v-model="newPractitioner.name" placeholder="Ej: Dra. María González" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md" />
-          </div>
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Identificador (RUT)</label>
-            <input
-              :value="newPractitioner.identifier"
-              @input="handleRutInput($event, newPractitioner, 'identifier')"
-              placeholder="12345678-9"
-              maxlength="10"
-              class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md font-mono" />
-            <p v-if="newPractitioner.identifier && newPractitioner.identifier.length < 9" class="text-[11px] text-error mt-1">RUT incompleto (mínimo 7 dígitos + dígito verificador)</p>
-          </div>
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Especialidad</label>
-            <input v-model="newPractitioner.specialty" placeholder="Medicina General" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md" />
-          </div>
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Contacto (telecom)</label>
-            <input v-model="newPractitioner.telecom" placeholder="+56 9 1234 5678" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md" />
-          </div>
-        </div>
-
-        <!-- Appointment form -->
-        <div v-if="modalType === 'appointment'" class="p-6 space-y-4">
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">ID Paciente</label>
-            <select v-model="newAppointment.patient_id" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md">
-              <option value="" disabled>Seleccionar paciente...</option>
-              <option v-for="p in patients" :key="p.id" :value="p.id">{{ p.name }} ({{ p.identifier }})</option>
-            </select>
-          </div>
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">ID Profesional</label>
-            <select v-model="newAppointment.practitioner_id" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md">
-              <option value="" disabled>Seleccionar profesional...</option>
-              <option v-for="pr in practitioners" :key="pr.id" :value="pr.id">{{ pr.name }} – {{ pr.specialty || 'General' }}</option>
-            </select>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Inicio</label>
-              <input v-model="newAppointment.start_time" type="datetime-local" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md" />
-            </div>
-            <div>
-              <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Fin</label>
-              <input v-model="newAppointment.end_time" type="datetime-local" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md" />
-            </div>
-          </div>
-          <div>
-            <label class="block font-label-caps text-label-caps text-on-surface-variant mb-1">Estado</label>
-            <select v-model="newAppointment.status" class="w-full bg-surface border border-outline-variant p-3 rounded-lg focus:border-primary outline-none text-body-md">
-              <option value="booked">Booked</option>
-              <option value="pending">Pending</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="px-6 py-4 border-t border-outline-variant/30 bg-surface-container-low flex gap-3 justify-end">
-          <button @click="showModal = false" class="px-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-sm font-semibold text-on-surface-variant hover:bg-surface transition-colors">Cancelar</button>
-          <button
-            @click="modalType === 'practitioner' ? createPractitioner() : modalType === 'appointment' ? createAppointment() : createPatient()"
-            :disabled="isLoading"
-            class="px-4 py-2 bg-primary rounded-lg text-body-sm font-semibold text-on-primary hover:opacity-90 transition-opacity flex items-center gap-2 shadow-sm disabled:opacity-70">
-            <span v-if="isLoading" class="material-symbols-outlined animate-spin text-[18px]">refresh</span>
-            <span v-else>Guardar Registro</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Toast -->
-    <Transition name="toast">
-      <div v-if="toast.show" class="fixed bottom-6 right-6 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border border-outline-variant/30 z-50" :class="toast.type === 'error' ? 'bg-error-container text-error' : 'bg-surface-container-highest text-on-surface'">
-        <span class="material-symbols-outlined text-[20px]">{{ toast.type === 'error' ? 'error' : 'check_circle' }}</span>
-        <span class="text-body-sm font-semibold">{{ toast.msg }}</span>
-      </div>
-    </Transition>
-
   </div>
+</div>
+
+<!-- ===== APP SHELL ===== -->
+<div v-else class="flex flex-1 overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside class="w-60 bg-white border-r border-gray-200 flex flex-col shrink-0">
+    <div class="p-5 border-b border-gray-100">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700"><span class="material-symbols-outlined text-[20px]">clinical_notes</span></div>
+        <h1 class="text-sm font-semibold text-gray-900 leading-tight">Consultorio</h1>
+      </div>
+    </div>
+    <nav class="flex-1 p-3 space-y-0.5">
+      <a @click.prevent="activeTab = 'inicio'" href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors" :class="activeTab === 'inicio' ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-600 hover:bg-gray-50'"><span class="material-symbols-outlined text-[20px]">dashboard</span>Inicio</a>
+      <a v-if="currentUser?.scopes?.includes('patients:read') || currentUser?.scopes?.includes('admin:all')" @click.prevent="activeTab = 'patients'" href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors" :class="activeTab === 'patients' ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-600 hover:bg-gray-50'"><span class="material-symbols-outlined text-[20px]">person</span>Pacientes</a>
+      <a v-if="currentUser?.scopes?.includes('appointments:read') || currentUser?.scopes?.includes('admin:all')" @click.prevent="activeTab = 'appointments'" href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors" :class="activeTab === 'appointments' ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-600 hover:bg-gray-50'"><span class="material-symbols-outlined text-[20px]">calendar_today</span>Citas</a>
+      <a v-if="currentUser?.scopes?.includes('practitioners:read') || currentUser?.scopes?.includes('admin:all')" @click.prevent="activeTab = 'practitioners'" href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors" :class="activeTab === 'practitioners' ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-600 hover:bg-gray-50'"><span class="material-symbols-outlined text-[20px]">stethoscope</span>Personal médico</a>
+      <div v-if="currentUser?.role === 'admin'" class="pt-2 mt-2 border-t border-gray-100"></div>
+      <a v-if="currentUser?.role === 'admin'" @click.prevent="activeTab = 'users'; fetchUsers()" href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors" :class="activeTab === 'users' ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-600 hover:bg-gray-50'"><span class="material-symbols-outlined text-[20px]">manage_accounts</span>Gestión de usuarios</a>
+    </nav>
+    <div class="p-3 border-t border-gray-100">
+      <div class="flex items-center gap-3 px-3 py-2 mb-2">
+        <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700">{{ currentUser?.fullName?.charAt(0) || 'U' }}</div>
+        <div class="min-w-0"><p class="text-sm font-medium text-gray-900 truncate">{{ currentUser?.fullName }}</p><p class="text-[11px] text-gray-400">{{ roleLabel }}</p></div>
+      </div>
+      <a @click.prevent="logout" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 cursor-pointer transition-colors"><span class="material-symbols-outlined text-[20px]">logout</span>Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 flex flex-col min-w-0 bg-gray-50 overflow-hidden">
+    <header class="flex justify-between items-center h-14 px-6 bg-white border-b border-gray-200 shrink-0">
+      <h2 class="text-base font-semibold text-gray-800">{{ activeTab === 'inicio' ? 'Panel principal' : activeTab === 'patients' ? 'Pacientes' : activeTab === 'appointments' ? 'Citas' : activeTab === 'practitioners' ? 'Personal médico' : 'Gestión de usuarios' }}</h2>
+      <button @click="fetchData" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="Actualizar"><span class="material-symbols-outlined text-[20px]" :class="{ 'animate-spin': isLoading }">sync</span></button>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+
+      <!-- INICIO -->
+      <template v-if="activeTab === 'inicio'">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="bg-white rounded-xl border border-gray-200 p-5"><div class="flex items-center justify-between mb-3"><span class="text-xs font-medium text-gray-400 uppercase tracking-wide">Pacientes</span><span class="material-symbols-outlined text-emerald-500 text-[20px]">person</span></div><p class="text-2xl font-semibold text-gray-900">{{ patients.length }}</p><p class="text-xs text-gray-400 mt-1">Total registrados</p></div>
+          <div class="bg-white rounded-xl border border-gray-200 p-5"><div class="flex items-center justify-between mb-3"><span class="text-xs font-medium text-gray-400 uppercase tracking-wide">Citas hoy</span><span class="material-symbols-outlined text-emerald-500 text-[20px]">today</span></div><p class="text-2xl font-semibold text-gray-900">{{ todayAppointments.length }}</p><p class="text-xs text-gray-400 mt-1">{{ new Date().toLocaleDateString('es-CL', { weekday:'long', day:'numeric', month:'long' }) }}</p></div>
+          <div class="bg-white rounded-xl border border-gray-200 p-5"><div class="flex items-center justify-between mb-3"><span class="text-xs font-medium text-gray-400 uppercase tracking-wide">Personal</span><span class="material-symbols-outlined text-emerald-500 text-[20px]">stethoscope</span></div><p class="text-2xl font-semibold text-gray-900">{{ practitioners.length }}</p><p class="text-xs text-gray-400 mt-1">Médicos y especialistas</p></div>
+        </div>
+        <div v-if="canWriteAppointments || currentUser?.role === 'medico'" class="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 class="text-sm font-semibold text-gray-800 mb-4">Citas del día</h3>
+          <div v-if="todayAppointments.length === 0" class="text-center py-8 text-sm text-gray-400"><span class="material-symbols-outlined text-[40px] mb-2 block text-gray-300">event_busy</span>No hay citas programadas para hoy</div>
+          <table v-else class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100"><th class="pb-2 font-medium">Hora</th><th class="pb-2 font-medium">Paciente</th><th class="pb-2 font-medium">Profesional</th><th class="pb-2 font-medium">Estado</th></tr></thead><tbody><tr v-for="a in todayAppointments" :key="a.id" class="border-b border-gray-50"><td class="py-2.5 text-gray-700">{{ new Date(a.start_time).toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' }) }}</td><td class="py-2.5 text-gray-700 font-medium">{{ a.patient_id }}</td><td class="py-2.5 text-gray-500">Dr/a. {{ a.practitioner_id }}</td><td class="py-2.5"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="statusColor(a.status)">{{ statusLabel(a.status) }}</span></td></tr></tbody></table>
+        </div>
+      </template>
+
+      <!-- PACIENTES -->
+      <template v-if="activeTab === 'patients'">
+        <div class="flex items-center justify-between">
+          <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[18px]">search</span><input v-model="searchQuery" placeholder="Buscar paciente..." class="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none w-64" /></div>
+          <button v-if="canWritePatients" @click="modalType = 'patient'; showModal = true" class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"><span class="material-symbols-outlined text-[18px]">add</span>Nuevo paciente</button>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/50"><th class="px-5 py-3 font-medium">Paciente</th><th class="px-5 py-3 font-medium">Identificador</th><th class="px-5 py-3 font-medium text-right w-20">Acciones</th></tr></thead>
+            <tbody class="divide-y divide-gray-50">
+              <tr v-for="p in filteredPatients" :key="p.id" class="hover:bg-gray-50/50 transition-colors"><td class="px-5 py-3"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-semibold text-emerald-700">{{ p.name?.charAt(0) || '?' }}</div><span class="font-medium text-gray-800">{{ p.name }}</span></div></td><td class="px-5 py-3 text-gray-500 font-mono text-xs">{{ p.identifier }}</td><td class="px-5 py-3 text-right"><button v-if="canWritePatients" @click="deleteRecord(p.id, 'patients')" class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Eliminar"><span class="material-symbols-outlined text-[18px]">delete</span></button></td></tr>
+              <tr v-if="filteredPatients.length === 0 && !isLoading"><td colspan="3" class="px-5 py-12 text-center text-sm text-gray-400"><span class="material-symbols-outlined text-[40px] mb-2 block text-gray-300">folder_open</span>No hay pacientes {{ searchQuery ? 'para esta búsqueda' : 'registrados' }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- CITAS -->
+      <template v-if="activeTab === 'appointments'">
+        <div class="flex items-center justify-between">
+          <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[18px]">search</span><input v-model="searchQuery" placeholder="Buscar cita..." class="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none w-64" /></div>
+          <button v-if="canWriteAppointments" @click="modalType = 'appointment'; showModal = true" class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"><span class="material-symbols-outlined text-[18px]">add</span>Nueva cita</button>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/50"><th class="px-5 py-3 font-medium">Fecha / Hora</th><th class="px-5 py-3 font-medium">Paciente</th><th class="px-5 py-3 font-medium">Profesional</th><th class="px-5 py-3 font-medium">Estado</th><th class="px-5 py-3 font-medium text-right w-20">Acciones</th></tr></thead>
+            <tbody class="divide-y divide-gray-50">
+              <tr v-for="a in filteredAppointments" :key="a.id" class="hover:bg-gray-50/50 transition-colors"><td class="px-5 py-3 text-gray-700">{{ new Date(a.start_time).toLocaleString('es-CL', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) }}</td><td class="px-5 py-3 text-gray-700 font-medium">{{ a.patient_id }}</td><td class="px-5 py-3 text-gray-500">Dr/a. {{ a.practitioner_id }}</td><td class="px-5 py-3"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="statusColor(a.status)">{{ statusLabel(a.status) }}</span></td><td class="px-5 py-3 text-right"><button v-if="canWriteAppointments" @click="deleteRecord(a.id, 'appointments')" class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Eliminar"><span class="material-symbols-outlined text-[18px]">delete</span></button></td></tr>
+              <tr v-if="filteredAppointments.length === 0 && !isLoading"><td colspan="5" class="px-5 py-12 text-center text-sm text-gray-400"><span class="material-symbols-outlined text-[40px] mb-2 block text-gray-300">event_busy</span>No hay citas {{ searchQuery ? 'para esta búsqueda' : 'registradas' }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- PERSONAL MÉDICO -->
+      <template v-if="activeTab === 'practitioners'">
+        <div class="flex items-center justify-between">
+          <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[18px]">search</span><input v-model="searchQuery" placeholder="Buscar profesional..." class="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none w-64" /></div>
+          <button v-if="canWritePractitioners" @click="modalType = 'practitioner'; showModal = true" class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"><span class="material-symbols-outlined text-[18px]">add</span>Nuevo profesional</button>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/50"><th class="px-5 py-3 font-medium">Profesional</th><th class="px-5 py-3 font-medium">Especialidad</th><th class="px-5 py-3 font-medium">Contacto</th><th class="px-5 py-3 font-medium text-right w-20">Acciones</th></tr></thead>
+            <tbody class="divide-y divide-gray-50">
+              <tr v-for="pr in filteredPractitioners" :key="pr.id" class="hover:bg-gray-50/50 transition-colors"><td class="px-5 py-3"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">{{ pr.name?.charAt(0) || '?' }}</div><span class="font-medium text-gray-800">{{ pr.name }}</span></div></td><td class="px-5 py-3 text-gray-500">{{ pr.specialty || 'Medicina general' }}</td><td class="px-5 py-3 text-gray-500 text-xs font-mono">{{ pr.telecom || '—' }}</td><td class="px-5 py-3 text-right"><button v-if="canWritePractitioners" @click="deleteRecord(pr.id, 'practitioners')" class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Eliminar"><span class="material-symbols-outlined text-[18px]">delete</span></button></td></tr>
+              <tr v-if="filteredPractitioners.length === 0 && !isLoading"><td colspan="4" class="px-5 py-12 text-center text-sm text-gray-400"><span class="material-symbols-outlined text-[40px] mb-2 block text-gray-300">folder_open</span>No hay profesionales registrados</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- GESTIÓN DE USUARIOS -->
+      <template v-if="activeTab === 'users'">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-gray-700">Usuarios del sistema</h3>
+          <button @click="modalType = 'user'; showModal = true" class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"><span class="material-symbols-outlined text-[18px]">person_add</span>Nuevo usuario</button>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/50"><th class="px-5 py-3 font-medium">Usuario</th><th class="px-5 py-3 font-medium">Rol</th><th class="px-5 py-3 font-medium">Permisos</th><th class="px-5 py-3 font-medium text-right w-20">Acciones</th></tr></thead>
+            <tbody class="divide-y divide-gray-50">
+              <tr v-for="u in users" :key="u.email" class="hover:bg-gray-50/50 transition-colors">
+                <td class="px-5 py-3"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-semibold text-emerald-700">{{ u.full_name?.charAt(0) || '?' }}</div><div><p class="font-medium text-gray-800">{{ u.full_name }}</p><p class="text-[11px] text-gray-400 font-mono">{{ u.email }}</p></div></div></td>
+                <td class="px-5 py-3"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="u.role === 'admin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : u.role === 'medico' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-violet-50 text-violet-700 border-violet-200'">{{ u.role === 'admin' ? 'Administrador' : u.role === 'medico' ? 'Médico' : 'Secretaria' }}</span></td>
+                <td class="px-5 py-3 text-[11px] text-gray-400">{{ u.scopes?.length || 0 }} scopes</td>
+                <td class="px-5 py-3 text-right"><button @click="deleteUser(u.email)" :disabled="u.email === currentUser?.email" class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" :title="u.email === currentUser?.email ? 'No puedes eliminarte a ti mismo' : 'Eliminar'"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>
+              </tr>
+              <tr v-if="users.length === 0 && !isLoading"><td colspan="4" class="px-5 py-12 text-center text-sm text-gray-400"><span class="material-symbols-outlined text-[40px] mb-2 block text-gray-300">group_off</span>No hay usuarios registrados</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+    </div>
+  </main>
+
+</div>
+
+<!-- ===== MODAL ===== -->
+<div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-lg border border-gray-200 w-full max-w-md overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+      <h3 class="text-base font-semibold text-gray-800">{{ modalType === 'practitioner' ? 'Nuevo profesional' : modalType === 'appointment' ? 'Nueva cita' : modalType === 'user' ? 'Nuevo usuario' : 'Nuevo paciente' }}</h3>
+      <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 transition-colors material-symbols-outlined">close</button>
+    </div>
+
+    <!-- Patient form -->
+    <div v-if="modalType === 'patient'" class="p-5 space-y-4">
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Nombre completo</label><input v-model="newPatient.name" placeholder="Ej: Juan Pérez" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Identificador (RUT)</label><input :value="newPatient.identifier" @input="handleRutInput($event, newPatient, 'identifier')" placeholder="12345678-9" maxlength="11" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+    </div>
+
+    <!-- Practitioner form -->
+    <div v-if="modalType === 'practitioner'" class="p-5 space-y-4">
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Nombre completo</label><input v-model="newPractitioner.name" placeholder="Ej: Dra. María González" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Identificador (RUT)</label><input :value="newPractitioner.identifier" @input="handleRutInput($event, newPractitioner, 'identifier')" placeholder="12345678-9" maxlength="11" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Especialidad</label><input v-model="newPractitioner.specialty" placeholder="Medicina general" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Contacto</label><input v-model="newPractitioner.telecom" placeholder="+56 9 1234 5678" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+    </div>
+
+    <!-- Appointment form -->
+    <div v-if="modalType === 'appointment'" class="p-5 space-y-4">
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Paciente</label><select v-model="newAppointment.patient_id" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="" disabled>Seleccionar paciente...</option><option v-for="p in patients" :key="p.id" :value="p.id">{{ p.name }} ({{ p.identifier }})</option></select></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Profesional</label><select v-model="newAppointment.practitioner_id" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="" disabled>Seleccionar profesional...</option><option v-for="pr in practitioners" :key="pr.id" :value="pr.id">{{ pr.name }} – {{ pr.specialty || 'Medicina general' }}</option></select></div>
+      <div class="grid grid-cols-2 gap-3"><div><label class="block text-xs font-medium text-gray-500 mb-1">Inicio</label><input v-model="newAppointment.start_time" type="datetime-local" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div><div><label class="block text-xs font-medium text-gray-500 mb-1">Fin</label><input v-model="newAppointment.end_time" type="datetime-local" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Estado</label><select v-model="newAppointment.status" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="agendada">Agendada</option><option value="confirmada">Confirmada</option><option value="cancelada">Cancelada</option></select></div>
+    </div>
+
+    <!-- User form -->
+    <div v-if="modalType === 'user'" class="p-5 space-y-4">
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Nombre completo</label><input v-model="newUser.full_name" placeholder="Ej: Dra. María González" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Correo electrónico</label><input v-model="newUser.email" type="email" placeholder="usuario@clinica.com" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none font-mono" /></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Rol</label><select v-model="newUser.role" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="medico">Médico</option><option value="secretaria">Secretaria</option><option value="admin">Administrador</option></select></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Contraseña</label><input v-model="newUser.password" type="text" placeholder="Mínimo 6 caracteres" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
+    </div>
+
+    <div class="px-5 py-4 border-t border-gray-100 bg-gray-50 flex gap-3 justify-end">
+      <button @click="showModal = false" class="px-4 py-2 border border-gray-200 bg-white rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors">Cancelar</button>
+      <button @click="modalType === 'practitioner' ? createPractitioner() : modalType === 'appointment' ? createAppointment() : modalType === 'user' ? createUser() : createPatient()" :disabled="isLoading" class="px-4 py-2 bg-emerald-600 rounded-lg text-sm font-medium text-white hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-50"><span v-if="isLoading" class="material-symbols-outlined animate-spin text-[18px]">refresh</span><span v-else>Guardar</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<Transition name="toast">
+  <div v-if="toast.show" class="fixed bottom-6 right-6 flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-lg border z-50 text-sm font-medium" :class="toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-800'">
+    <span class="material-symbols-outlined text-[18px]">{{ toast.type === 'error' ? 'error' : 'check_circle' }}</span>{{ toast.msg }}
+  </div>
+</Transition>
+
+</div>
 </template>
 
 <style>
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from { opacity: 0; transform: translateY(1rem); }
-.toast-leave-to { opacity: 0; transform: translateY(1rem); }
+.toast-enter-active, .toast-leave-active { transition: all 0.25s ease; }
+.toast-enter-from { opacity: 0; transform: translateY(0.5rem); }
+.toast-leave-to { opacity: 0; transform: translateY(0.5rem); }
 </style>

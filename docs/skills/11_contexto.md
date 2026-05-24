@@ -1,14 +1,12 @@
 ---
-name: desarrollo-basado-en-contexto
-description: >-
-  Crea y mantiene artefactos de contexto del proyecto (product.md, tech-stack.md, workflow.md, tracks.md)
-  en un directorio `conductor/`. Inicializa nuevos proyectos desde cero, extrae contexto de bases de código 
-  existentes, valida la consistencia de los artefactos antes de la implementación, y sincroniza los documentos 
-  a medida que el proyecto evoluciona. Úsalo al configurar un proyecto, crear o actualizar documentos de producto, 
-  gestionar el archivo de tecnologías (tech stack), definir flujos de trabajo de desarrollo, hacer seguimiento 
-  de unidades de trabajo, integrarte a un proyecto existente o hacer un andamiaje (scaffolding) del proyecto.
+name: context-driven-development
 version: 1.0.0
+depends_on: []
+stage: meta
+governance: all
+description: Crea y mantiene artefactos de contexto del proyecto (product.md, tech-stack.md, workflow.md, tracks.md). Soporta greenfield y brownfield.
 ---
+
 
 # Desarrollo Basado en Contexto
 
@@ -206,6 +204,17 @@ conductor/
         ├── metadata.json
         └── index.md
 ```
+
+## Verificación post-generación
+
+Antes de confirmar que el contexto está listo, verificar:
+- [ ] `product.md` define visión, usuarios, features principales
+- [ ] `tech-stack.md` lista lenguajes, frameworks, versiones, herramientas
+- [ ] `workflow.md` define metodología, git flow, code review, QA gates
+- [ ] `tracks.md` inicializado con tracks activos (o vacío si es greenfield)
+- [ ] `index.md` navega correctamente todos los artefactos
+- [ ] Los artefactos son consistentes entre sí (no hay contradicciones)
+- [ ] Si es brownfield: los patrones extraídos del código coinciden con lo documentado
 
 ## Buenas Prácticas
 

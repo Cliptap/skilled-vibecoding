@@ -9,9 +9,12 @@ oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
     scopes={
         "admin:all": "Acceso total",
-        "appointments:write": "Crear/Editar citas",
+        "patients:read": "Leer pacientes",
+        "patients:write": "Crear/Editar/Eliminar pacientes",
+        "practitioners:read": "Leer profesionales",
+        "practitioners:write": "Crear/Editar/Eliminar profesionales",
         "appointments:read": "Leer citas",
-        "patients:read": "Leer registros de pacientes"
+        "appointments:write": "Crear/Editar/Eliminar citas",
     }
 )
 

@@ -1,6 +1,14 @@
-Skill: Definición de Pipeline ETL (Carga, Transformación y Validación)
+---
+name: etl-pipeline
+version: 1.0.0
+depends_on: [prd-generation, db-schema-design]
+stage: 3
+governance: all
+description: Pipeline ETL con validación según nivel de gobernanza, carga chunked, logging estructurado y transaccionalidad completa.
+---
+# Skill: Definición de Pipeline ETL (Carga, Transformación y Validación)
 
-Objetivo
+## Objetivo
 Construir un script/pipeline en el Backend que extraiga, valide (con niveles de gobernanza y aseguramiento de calidad), transforme los datos de los usuarios o fuentes de origen y los ingrese de manera limpia y estandarizada a la base de datos.
 
 ________________________________________
@@ -38,6 +46,18 @@ Reglas OBLIGATORIAS
 • Extracción Inteligente: Si los de datos son masivos, usar chunks o batches, y no saturar memoria RAM cargando todo en variables al mismo tiempo.
 • Registro Fiel (Logging): No utilizar "prints" o depuradores genéricos, integrar librerías de logging que permitan rastrear errores críticos (ERROR), alertas (WARNING), o seguimiento (INFO). Para un PRD de gobernanza Media a Alta, se requiere registro en DB del proceso batch.
 • Transaccionalidad: O todo entra bien, o se aborta el bloque. Proteger usando BEGIN y COMMIT / ROLLBACK, no tener datos corruptos ni a medias en caso de que ocurra una de error a la mitad de una carga masiva.
+
+________________________________________
+## Verificación post-generación
+
+Antes de confirmar el cierre, verificar que el pipeline ETL generado:
+- [ ] El proceso ETL está en clases/servicios separados de las rutas API
+- [ ] Carga de archivos grandes usa chunks/batches (no carga todo en RAM)
+- [ ] Logging con librería `logging` (niveles ERROR, WARNING, INFO) — nunca `print()`
+- [ ] Transaccionalidad con `BEGIN/COMMIT/ROLLBACK` explícito
+- [ ] Validaciones según nivel de gobernanza: medio/alto registra logs de ejecución en DB
+- [ ] Si gobernanza media/alta: registro de quién inició el proceso y resultado
+- [ ] Validación de formato para campos regulados (RUT, email, teléfono) en backend, no solo frontend
 
 ________________________________________
 Condición de cierre

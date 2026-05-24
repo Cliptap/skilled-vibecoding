@@ -1,6 +1,14 @@
-Skill: Pruebas Funcionales y TDD Avanzado (Alta Gobernanza)
+---
+name: backend-testing
+version: 1.0.0
+depends_on: [api-endpoints, auth-security, persistence-orm]
+stage: cross-cutting
+governance: [medium, high]
+description: TDD con Pytest asíncrono, DB aislada por test, mocks de auth, y aserciones negativas obligatorias (401/403/404).
+---
+# Skill: Pruebas Funcionales y TDD (Alta Gobernanza)
 
-Objetivo
+## Objetivo
 Garantizar la calidad y resiliencia del código mediante el diseño estructurado de pruebas automatizadas (Test-Driven Development), validando flujos HTTP Asíncronos, restricciones de roles (RBAC) e inyección de dependencias puras (sin alterar bases de datos productivas).
 ________________________________________
 Instrucciones
@@ -12,6 +20,15 @@ Instrucciones
 ________________________________________
 Flujo de interacción
 
+0. Nivel de Gobernanza Heredado
+Confirmar el nivel definido en el PRD (Skill 01) antes de diseñar la estrategia de testing:
+- **Baja:** Solo tests de happy path. Sin tests de seguridad. DB aislada opcional.
+- **Media:** Tests de happy path + tests negativos (401/403/404). DB aislada por test con rollback. Mocks de auth por dependency override. Cobertura mínima: 80%.
+- **Alta:** Tests negativos exhaustivos por cada rol y scope. Tests de soft delete. Tests de auditoría (verificar que created_by se registra). Contract testing entre servicios. Performance testing para endpoints críticos. Cobertura mínima: 90%.
+
+Preguntar: "¿El PRD definió gobernanza media o alta? Esto determina el alcance de tests negativos y si se requieren tests de auditoría."
+
+________________________________________
 1. Herramientas y Clientes de Prueba
 Confirmar el uso del stack base (ej: Pytest, `pytest-asyncio`, `httpx.AsyncClient`). Consultar cómo se manejarán los ciclos de vida asíncronos en los fixtures.
 
@@ -32,6 +49,19 @@ Reglas y Mejores Prácticas OBLIGATORIAS
 • TDD Strict: Al diseñar nuevas funcionalidades, se debe enviar el cascarón del Test primero, para forzar el patrón rojo-verde-refactor.
 • Modo de Optimización: En Caveman Mode, escupir directamente `conftest.py` y los archivos de `test_*.py` asíncronos sin explicaciones teóricas extensas.
 ________________________________________
+## Verificación post-generación
+
+Antes de confirmar el cierre, verificar que el código de testing generado:
+- [ ] Patrón Arrange-Act-Assert en toda prueba
+- [ ] Cada test es independiente (no depende del residuo de otro test)
+- [ ] DB aislada: rollback por test o BD efímera (`sqlite+aiosqlite` o PostgreSQL por corrida)
+- [ ] Auth mockeada vía `app.dependency_overrides[get_current_user]`
+- [ ] Tests negativos obligatorios: 401 (sin token), 403 (rol sin scope), 404 (no encontrado)
+- [ ] Si gobernanza media/alta: tests de soft delete (verificar que deleted_at se puebla, no DELETE físico)
+- [ ] `conftest.py` con fixtures reutilizables (async client, test DB, auth override)
+- [ ] Cobertura mínima alcanzada: 80% (media) o 90% (alta)
+
+________________________________________
 Condición de cierre
 Antes de generar el código, resumir la configuración de testing acordada:
 “Voy a redactar los fixtures de test (DB efímera / Mock Auth) y las aserciones de tus flujos mediante Pytest-Asyncio. ¿Avanzamos?”
@@ -43,3 +73,14 @@ Formato de salida
 A. `conftest.py` (Fixtures y Engine db override).
 B. Dependencias Fake o Tokens utilitarios.
 C. `test_feature.py` completo (Casos felices y negativos).
+
+________________________________________
+## Modo Caveman (atajo para usuarios avanzados)
+
+Si el usuario solicita explícitamente "Caveman Mode" o "solo código":
+- Omite el flujo de preguntas y la confirmación de cierre.
+- Emite directamente conftest.py y archivos test_*.py asíncronos sin explicaciones teóricas.
+- Incluye un bloque inicial `## Decisiones Asumidas` listando: stack de testing, tipo de DB aislada, estrategia de mock de auth.
+- Aplica todas las reglas OBLIGATORIAS: Arrange-Act-Assert, independencia de estado (rollback por test), pruebas negativas para 401/403/404.
+
+**ADVERTENCIA:** Este modo omite validación interactiva. El tipo de DB aislada y la estrategia de mock pueden no ser óptimos para el proyecto. Revisar conftest.py antes de ejecutar la suite.

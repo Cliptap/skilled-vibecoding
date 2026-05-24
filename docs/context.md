@@ -29,7 +29,26 @@ Construir un repositorio simple de procesamiento de datos utilizando Vibe Coding
 
 ---
 
-## 3. Pipeline de Desarrollo Propuesto (5 Etapas)
+## 3. Grafo de Dependencias entre Skills
+
+```
+01_prd ────────────► 02_db ──────────► 08_orm ──────► 03_api ──────► 05_frontend
+   │                    │                  │               │               │
+   │                    │                  │               ├──► 07_auth ───┤
+   │                    │                  │               │               │
+   │                    ├──► 04_etl ───────┘               │               │
+   │                    │                                  │               │
+   │                    └──► 06_reports                    │               │
+   │                                                       │               │
+   └───────────────────────────────────────────────────────┴───────────────┘
+                                                           │
+                    09_docker ◄────────────────────────────┘
+                    10_testing ◄────── 03_api + 07_auth + 08_orm
+
+Cross-cutting: 09_docker (post-frontend), 10_testing (post-api+auth), 11_contexto (always first)
+```
+
+## 4. Pipeline de Desarrollo Propuesto (5 Etapas)
 
 ### Etapa 1: Definición del PRD (Product Requirements Document)
 Conversación inicial con la IA para definir el propósito, usuarios, casos de uso y tipo de datos.
