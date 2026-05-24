@@ -136,7 +136,7 @@ onMounted(() => {
 <div v-if="!token" class="flex-1 flex items-center justify-center p-6">
   <div class="w-full max-w-2xl">
     <div class="text-center mb-8">
-      <div class="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-3 text-emerald-700"><span class="material-symbols-outlined text-[32px]">clinical_notes</span></div>
+      <div class="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-3 overflow-hidden"><img src="/logo.webp" alt="Logo" class="w-10 h-10 object-contain" /></div>
       <h1 class="text-2xl font-semibold text-gray-900">Consultorio Central</h1>
       <p class="text-sm text-gray-500 mt-1">Sistema de gestión clínica — Demostración de roles</p>
     </div>
@@ -167,7 +167,7 @@ onMounted(() => {
   <aside class="w-60 bg-white border-r border-gray-200 flex flex-col shrink-0">
     <div class="p-5 border-b border-gray-100">
       <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700"><span class="material-symbols-outlined text-[20px]">clinical_notes</span></div>
+        <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center overflow-hidden"><img src="/logo.webp" alt="Logo" class="w-6 h-6 object-contain" /></div>
         <h1 class="text-sm font-semibold text-gray-900 leading-tight">Consultorio</h1>
       </div>
     </div>
