@@ -14,9 +14,9 @@
     "scopes": ["patients:read", "appointments:read", "appointments:write", "practitioners:read"]
   },
   {
-    "email": "secretaria@clinic.com",
+    "email": "recepcionista@clinic.com",
     "full_name": "Sra. Ana Martínez",
-    "role": "secretaria",
+    "role": "recepcionista",
     "hashed_password": "$2b$12$EdsBxPpHdZjTyHLl4h1RvO6PF5w.4TZoUoWQxS1vjJGJ7iwnAzK0y",
     "scopes": ["patients:read", "patients:write", "appointments:read", "appointments:write", "practitioners:read"]
   }

@@ -140,7 +140,7 @@ En Docker Compose se inyectan automáticamente. Para desarrollo local los defaul
 Este proyecto usa **gobernanza media**, lo que implica:
 
 - Validaciones en frontend y backend para todo campo regulado
-- RBAC con 3 roles: admin, médico, secretaria
+- RBAC con 3 roles: admin, médico, recepcionista
 - Soft deletes en todas las entidades (`deleted_at`)
 - Columnas de auditoría: `created_at`, `updated_at`
 - Trazabilidad de quién crea y modifica cada registro

@@ -42,7 +42,7 @@ Ejemplo para sistema clínico:
 |-----|-----------|-------|----------|
 | Admin | CRUD | CRUD | CRUD |
 | Médico | R-U | CRUD | R--- |
-| Secretaria | CRUD | CRUD | R--- |
+| Recepcionista | CRUD | CRUD | R--- |
 | Auditor | R--- | R--- | R--- |
 
 A partir de esta matriz se derivan los scopes (ej: `patients:write`, `appointments:read`).

@@ -238,12 +238,12 @@ def test_create_appointment():
 ### CON skills (guiado por `10_backend_testing.md`)
 ```python
 @pytest.mark.asyncio
-async def test_create_appointment_success(auth_client_secretaria):
-    """Happy path: secretaria agenda cita"""
+async def test_create_appointment_success(auth_client_recepcionista):
+    """Happy path: recepcionista agenda cita"""
     # Arrange
     payload = {"patient_id": 1, "practitioner_id": 2, "scheduled_at": "2026-06-01T10:00:00-04:00"}
     # Act
-    response = await auth_client_secretaria.post("/api/v1/appointments", json=payload)
+    response = await auth_client_recepcionista.post("/api/v1/appointments", json=payload)
     # Assert
     assert response.status_code == 201
     assert response.json()["status"] == "scheduled"

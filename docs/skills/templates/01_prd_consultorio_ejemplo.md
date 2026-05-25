@@ -23,7 +23,7 @@
 
 ## 2. Usuarios
 - **Tipos:**
-  - Secretaria: agenda y modifica citas
+  - Recepcionista: agenda y modifica citas
   - Médico: consulta sus citas del día
   - Administrador: gestiona usuarios y ve reportes
 - **Uso:**
@@ -41,7 +41,7 @@
 ---
 
 ## 4. Fuentes
-- **Origen:** Ingreso manual vía formulario web (secretaria)
+- **Origen:** Ingreso manual vía formulario web (recepcionista)
 - **También se contempla:** carga CSV para migración inicial de datos históricos
 
 ---
@@ -68,6 +68,6 @@
 - **Implicancias:**
   - Validaciones de datos en frontend y backend
   - Logs de ejecución (quién creó/modificó cada registro)
-  - Control de acceso básico (3 roles: admin, médico, secretaria)
+  - Control de acceso básico (3 roles: admin, médico, recepcionista)
   - Soft deletes en todas las entidades
   - Columnas de auditoría: `created_at`, `updated_at`, `deleted_at`

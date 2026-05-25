@@ -31,7 +31,7 @@ def create_user(email: str, full_name: str, role: str, password: str):
     scopes_map = {
         "admin": ["admin:all", "patients:read", "patients:write", "appointments:read", "appointments:write", "practitioners:read", "practitioners:write"],
         "medico": ["patients:read", "appointments:read", "appointments:write", "practitioners:read"],
-        "secretaria": ["patients:read", "patients:write", "appointments:read", "appointments:write", "practitioners:read"],
+        "recepcionista": ["patients:read", "patients:write", "appointments:read", "appointments:write", "practitioners:read"],
     }
 
     new_user = {

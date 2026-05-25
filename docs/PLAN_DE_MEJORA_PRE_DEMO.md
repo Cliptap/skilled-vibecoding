@@ -112,9 +112,9 @@ Se construyó una aplicación completa que demuestra las skills en acción:
 | Componente | Qué se hizo |
 |-----------|-------------|
 | **Frontend** | App.vue reescrito: 100% español, diseño profesional (grises + esmeralda), sin mock data ni inglés |
-| **Roles** | 3 vistas diferenciadas: admin (full), médico (sus citas + lectura), secretaria (pacientes + citas) |
+| **Roles** | 3 vistas diferenciadas: admin (full), médico (sus citas + lectura), recepcionista (pacientes + citas) |
 | **Login** | Selector de usuario demo con 3 roles. JWT decodificado client-side para mostrar nombre y permisos |
-| **Backend** | 3 usuarios demo (admin, medico, secretaria). JWT enriquecido con `full_name` y `role` |
+| **Backend** | 3 usuarios demo (admin, medico, recepcionista). JWT enriquecido con `full_name` y `role` |
 | **Scopes** | Endpoints corregidos: `patients:write`, `practitioners:write`, `appointments:write` en vez de solo `admin:all` |
 | **UI** | Botón "Nuevo paciente" arriba de la tabla. Sidebar adaptado al rol. Estados vacíos con íconos y mensajes |
 | **Limpieza** | Eliminados: HelloWorld.vue, hero.png, vite.svg, vue.svg, stitch_dashboard_mockup.html, download.py, lucide-vue-next |
@@ -233,7 +233,7 @@ el grado de cumplimiento actual y las acciones necesarias.
 | Validación RUT solo frontend | Regex suelto | Módulo-11 backend + auto-formato frontend |
 | Trazabilidad de cambios | Sin `created_by`/`updated_at` | Todas las tablas con auditoría |
 | Inglés en la interfaz | "Health Systems v2.4", "Booked", "FHIR Sync" | **0 términos en inglés** |
-| Vistas por rol | Una sola vista genérica | **3 vistas diferenciadas** (admin, médico, secretaria) |
+| Vistas por rol | Una sola vista genérica | **3 vistas diferenciadas** (admin, médico, recepcionista) |
 | Mock data hardcodeada | "14 sesiones activas", "99.9% FHIR Sync" | **0 datos mock — todo del backend** |
 
 ---

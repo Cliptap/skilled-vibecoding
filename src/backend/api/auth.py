@@ -58,8 +58,8 @@ async def register_user(
     data: UserCreate,
     current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])]
 ):
-    if data.role not in ("admin", "medico", "secretaria"):
-        raise HTTPException(status_code=400, detail="Rol inválido. Usar: admin, medico, secretaria")
+    if data.role not in ("admin", "medico", "recepcionista"):
+        raise HTTPException(status_code=400, detail="Rol inválido. Usar: admin, medico, recepcionista")
     user = create_user(data.email, data.full_name, data.role, data.password)
     if not user:
         raise HTTPException(status_code=409, detail="El usuario ya existe")

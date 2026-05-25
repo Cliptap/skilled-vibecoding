@@ -24,17 +24,17 @@ const searchQuery = ref('')
 const newPatient = ref({ identifier: '', name: '' })
 const newPractitioner = ref({ identifier: '', name: '', specialty: '', telecom: '' })
 const newAppointment = ref({ patient_id: '', practitioner_id: '', start_time: '', end_time: '', status: 'agendada' })
-const newUser = ref({ email: '', full_name: '', role: 'secretaria', password: '' })
+const newUser = ref({ email: '', full_name: '', role: 'recepcionista', password: '' })
 
 const roles = [
   { id: 'admin', label: 'Administrador', email: 'admin@clinic.com', pwd: 'admin123', icon: 'admin_panel_settings', color: 'emerald', desc: 'Acceso total al sistema. Gestiona pacientes, profesionales, citas y usuarios.' },
   { id: 'medico', label: 'Médico', email: 'medico@clinic.com', pwd: 'admin123', icon: 'stethoscope', color: 'blue', desc: 'Ve sus citas del día, consulta fichas de pacientes y agenda nuevas consultas.' },
-  { id: 'secretaria', label: 'Secretaria', email: 'secretaria@clinic.com', pwd: 'admin123', icon: 'person_add', color: 'violet', desc: 'Registra pacientes, agenda citas y gestiona la agenda diaria del consultorio.' }
+  { id: 'recepcionista', label: 'Recepcionista', email: 'recepcionista@clinic.com', pwd: 'admin123', icon: 'person_add', color: 'violet', desc: 'Registra pacientes, agenda citas y gestiona la agenda diaria del consultorio.' }
 ]
 
 const roleLabel = computed(() => {
   if (!currentUser.value) return ''
-  const map = { admin: 'Administrador', medico: 'Médico', secretaria: 'Secretaria' }
+  const map = { admin: 'Administrador', medico: 'Médico', recepcionista: 'Recepcionista' }
   return map[currentUser.value.role] || ''
 })
 const canWritePatients = computed(() => currentUser.value?.scopes?.includes('patients:write') || currentUser.value?.scopes?.includes('admin:all'))
@@ -111,7 +111,7 @@ const deleteRecord = async (id, type) => { if (!confirm('¿Eliminar este registr
 const createUser = async () => {
   if (!newUser.value.email || !newUser.value.full_name || !newUser.value.password) { showToast('Todos los campos son requeridos', 'error'); return }
   isLoading.value = true
-  try { await axios.post(`${apiBase}/users`, newUser.value, authHeaders()); showToast('Usuario creado'); showModal.value = false; newUser.value = { email: '', full_name: '', role: 'secretaria', password: '' }; fetchUsers() }
+  try { await axios.post(`${apiBase}/users`, newUser.value, authHeaders()); showToast('Usuario creado'); showModal.value = false; newUser.value = { email: '', full_name: '', role: 'recepcionista', password: '' }; fetchUsers() }
   catch (err) { showToast(err.response?.data?.detail || 'Error al crear usuario', 'error') }
   finally { isLoading.value = false }
 }
@@ -275,7 +275,7 @@ onMounted(() => {
             <tbody class="divide-y divide-gray-50">
               <tr v-for="u in users" :key="u.email" class="hover:bg-gray-50/50 transition-colors">
                 <td class="px-5 py-3"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-semibold text-emerald-700">{{ u.full_name?.charAt(0) || '?' }}</div><div><p class="font-medium text-gray-800">{{ u.full_name }}</p><p class="text-[11px] text-gray-400 font-mono">{{ u.email }}</p></div></div></td>
-                <td class="px-5 py-3"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="u.role === 'admin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : u.role === 'medico' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-violet-50 text-violet-700 border-violet-200'">{{ u.role === 'admin' ? 'Administrador' : u.role === 'medico' ? 'Médico' : 'Secretaria' }}</span></td>
+                <td class="px-5 py-3"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="u.role === 'admin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : u.role === 'medico' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-violet-50 text-violet-700 border-violet-200'">{{ u.role === 'admin' ? 'Administrador' : u.role === 'medico' ? 'Médico' : 'Recepcionista' }}</span></td>
                 <td class="px-5 py-3 text-[11px] text-gray-400">{{ u.scopes?.length || 0 }} scopes</td>
                 <td class="px-5 py-3 text-right"><button @click="deleteUser(u.email)" :disabled="u.email === currentUser?.email" class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" :title="u.email === currentUser?.email ? 'No puedes eliminarte a ti mismo' : 'Eliminar'"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>
               </tr>
@@ -324,7 +324,7 @@ onMounted(() => {
     <div v-if="modalType === 'user'" class="p-5 space-y-4">
       <div><label class="block text-xs font-medium text-gray-500 mb-1">Nombre completo</label><input v-model="newUser.full_name" placeholder="Ej: Dra. María González" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
       <div><label class="block text-xs font-medium text-gray-500 mb-1">Correo electrónico</label><input v-model="newUser.email" type="email" placeholder="usuario@clinica.com" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none font-mono" /></div>
-      <div><label class="block text-xs font-medium text-gray-500 mb-1">Rol</label><select v-model="newUser.role" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="medico">Médico</option><option value="secretaria">Secretaria</option><option value="admin">Administrador</option></select></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Rol</label><select v-model="newUser.role" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="medico">Médico</option><option value="recepcionista">Recepcionista</option><option value="admin">Administrador</option></select></div>
       <div><label class="block text-xs font-medium text-gray-500 mb-1">Contraseña</label><input v-model="newUser.password" type="text" placeholder="Mínimo 6 caracteres" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
     </div>
 
