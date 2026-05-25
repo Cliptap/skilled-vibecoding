@@ -121,7 +121,7 @@ if (!/^\d{7,8}-[\dkK]$/.test(rut)) {
 
 ---
 
-### CON skills (guiado por `04_backend_pipeline_etl.md` sección RUT + `16_input_validation_patterns.md`)
+### CON skills (guiado por `04_backend_pipeline_etl.md` sección RUT + `14_input_validation_patterns.md`)
 ```vue
 <template>
   <input

@@ -83,7 +83,7 @@ Ver [`docs/skills/templates/antes_vs_despues_citas_medicas.md`](skills/templates
 |---|-------|-----------|--------|
 | 12 | `12_frontend_testing.md` | Component tests (Vitest) + E2E (Playwright) + accesibilidad axe-core | **Creado** |
 | 13 | `13_observability.md` | Logging JSON estructurado, métricas Prometheus, health checks, tracing | **Creado** |
-| 16 | `16_input_validation_patterns.md` | 7 preguntas generalizadas para cualquier campo regulado | **Creado** |
+| 14 | `14_input_validation_patterns.md` | 7 preguntas generalizadas para cualquier campo regulado | **Creado** |
 
 ### 3.2 Refinamiento de skills existentes
 
@@ -137,7 +137,7 @@ Se construyó una aplicación completa que demuestra las skills en acción:
 ### Fase 2: Nuevas skills — COMPLETADO
 - [x] Crear `12_frontend_testing.md`
 - [x] Crear `13_observability.md`
-- [x] Crear `16_input_validation_patterns.md`
+- [x] Crear `14_input_validation_patterns.md`
 
 ### Fase 3: Templates + demo funcional — COMPLETADO
 - [x] Crear PRD de ejemplo: consultorio médico 3 tablas con gobernanza media

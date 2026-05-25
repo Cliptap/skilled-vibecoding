@@ -9,6 +9,10 @@ from src.database.models import Appointment
 from src.database.repository import BaseRepository
 from src.backend.schemas import AppointmentCreate, AppointmentResponse
 from src.backend.security.dependencies import get_current_user, TokenData
+from pydantic import BaseModel
+
+class StatusUpdate(BaseModel):
+    status: str
 
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
 
@@ -52,3 +56,21 @@ async def delete_appointment(
     success = await repo.soft_delete(appointment_id)
     if not success:
         raise HTTPException(status_code=404, detail="Appointment no encontrada")
+
+@router.patch("/{appointment_id}/status", response_model=AppointmentResponse)
+async def update_appointment_status(
+    appointment_id: str,
+    status_update: StatusUpdate,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["appointments:write"])],
+    db: AsyncSession = Depends(get_db)):
+    repo = AppointmentRepository(db)
+    appointment = await repo.get(appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+    valid = {"agendada","confirmada","en_curso","completada","cancelada","no_asiste"}
+    if status_update.status not in valid:
+        raise HTTPException(status_code=400, detail=f"Estado inválido. Usar: {', '.join(sorted(valid))}")
+    appointment.status = status_update.status
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment

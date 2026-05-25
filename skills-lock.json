@@ -14,7 +14,7 @@
     "context-driven-development": {"version": "1.0.0", "stage": "meta", "file": "docs/skills/11_contexto.md"},
     "frontend-testing": {"version": "1.0.0", "stage": "cross-cutting", "file": "docs/skills/12_frontend_testing.md"},
     "observability": {"version": "1.0.0", "stage": "cross-cutting", "file": "docs/skills/13_observability.md"},
-    "input-validation-patterns": {"version": "1.0.0", "stage": "cross-cutting", "file": "docs/skills/16_input_validation_patterns.md"}
+    "input-validation-patterns": {"version": "1.0.0", "stage": "cross-cutting", "file": "docs/skills/14_input_validation_patterns.md"}
   },
   "external_skills": {
     "caveman": {
