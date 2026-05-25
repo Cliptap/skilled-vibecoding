@@ -106,18 +106,10 @@ const createAppointment = async () => {
 
 const deleteRecord = async (id, type) => { if (!confirm('¿Eliminar este registro?')) return; try { await axios.delete(`${apiBase}/${type}/${id}/`, authHeaders()); showToast('Registro eliminado'); fetchData() } catch (err) { showToast(err.response?.data?.detail || 'Error al eliminar', 'error') } }
 
-const updateAppointmentStatus = async (id, newStatus) => {
-  isLoading.value = true
-  try { await axios.patch(`${apiBase}/appointments/${id}/status`, { status: newStatus }, authHeaders()); showToast(`Estado: ${statusLabel(newStatus)}`); fetchData() }
-  catch (err) { showToast(err.response?.data?.detail || 'Error al actualizar', 'error') }
-  finally { isLoading.value = false }
-}
-
 const createUser = async () => {
   if (!newUser.value.email || !newUser.value.full_name || !newUser.value.password) { showToast('Todos los campos son requeridos', 'error'); return }
   isLoading.value = true
-  const pwd = newUser.value.password
-  try { await axios.post(`${apiBase}/users`, newUser.value, authHeaders()); showToast(`Usuario creado. Contraseña: ${pwd}`); showModal.value = false; newUser.value = { email: '', full_name: '', role: 'secretaria', password: '' }; fetchUsers() }
+  try { await axios.post(`${apiBase}/users`, newUser.value, authHeaders()); showToast('Usuario creado'); showModal.value = false; newUser.value = { email: '', full_name: '', role: 'secretaria', password: '' }; fetchUsers() }
   catch (err) { showToast(err.response?.data?.detail || 'Error al crear usuario', 'error') }
   finally { isLoading.value = false }
 }
@@ -131,6 +123,9 @@ const filteredPatients = computed(() => { if (!searchQuery.value) return patient
 const filteredPractitioners = computed(() => { if (!searchQuery.value) return practitioners.value; const q = searchQuery.value.toLowerCase(); return practitioners.value.filter(p => p.name?.toLowerCase().includes(q) || p.specialty?.toLowerCase().includes(q)) })
 const filteredAppointments = computed(() => { if (!searchQuery.value) return appointments.value; const q = searchQuery.value.toLowerCase(); return appointments.value.filter(a => a.patient_id?.toLowerCase().includes(q) || a.status?.toLowerCase().includes(q)) })
 const todayAppointments = computed(() => appointments.value.filter(a => { const d = new Date(a.start_time); const today = new Date(); return d.toDateString() === today.toDateString() }))
+
+const patientName = (id) => { const p = patients.value.find(x => x.id === id); return p ? p.name : id }
+const practitionerName = (id) => { const p = practitioners.value.find(x => x.id === id); return p ? p.name : id }
 
 onMounted(() => {
   if (token.value) { const payload = decodeJwt(token.value); if (payload) { currentUser.value = { email: payload.sub, fullName: payload.full_name || payload.sub, role: payload.role || 'admin', scopes: payload.scopes || [] }; fetchData(); if (payload.role === 'admin') fetchUsers() } }
@@ -215,7 +210,7 @@ onMounted(() => {
         <div v-if="canWriteAppointments || currentUser?.role === 'medico'" class="bg-white rounded-xl border border-gray-200 p-5">
           <h3 class="text-sm font-semibold text-gray-800 mb-4">Citas del día</h3>
           <div v-if="todayAppointments.length === 0" class="text-center py-8 text-sm text-gray-400"><span class="material-symbols-outlined text-[40px] mb-2 block text-gray-300">event_busy</span>No hay citas programadas para hoy</div>
-          <table v-else class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100"><th class="pb-2 font-medium">Hora</th><th class="pb-2 font-medium">Paciente</th><th class="pb-2 font-medium">Profesional</th><th class="pb-2 font-medium">Estado</th></tr></thead><tbody><tr v-for="a in todayAppointments" :key="a.id" class="border-b border-gray-50"><td class="py-2.5 text-gray-700">{{ new Date(a.start_time).toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' }) }}</td><td class="py-2.5 text-gray-700 font-medium">{{ a.patient_id }}</td><td class="py-2.5 text-gray-500">Dr/a. {{ a.practitioner_id }}</td><td class="py-2.5"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="statusColor(a.status)">{{ statusLabel(a.status) }}</span></td></tr></tbody></table>
+          <table v-else class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100"><th class="pb-2 font-medium">Hora</th><th class="pb-2 font-medium">Paciente</th><th class="pb-2 font-medium">Profesional</th><th class="pb-2 font-medium">Estado</th></tr></thead><tbody><tr v-for="a in todayAppointments" :key="a.id" class="border-b border-gray-50"><td class="py-2.5 text-gray-700">{{ new Date(a.start_time).toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' }) }}</td><td class="py-2.5 text-gray-700 font-medium">{{ patientName(a.patient_id) }}</td><td class="py-2.5 text-gray-500">{{ practitionerName(a.practitioner_id) }}</td><td class="py-2.5"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="statusColor(a.status)">{{ statusLabel(a.status) }}</span></td></tr></tbody></table>
         </div>
       </template>
 
@@ -244,7 +239,7 @@ onMounted(() => {
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100 bg-gray-50/50"><th class="px-5 py-3 font-medium">Fecha / Hora</th><th class="px-5 py-3 font-medium">Paciente</th><th class="px-5 py-3 font-medium">Profesional</th><th class="px-5 py-3 font-medium">Estado</th><th class="px-5 py-3 font-medium text-right w-20">Acciones</th></tr></thead>
             <tbody class="divide-y divide-gray-50">
-              <tr v-for="a in filteredAppointments" :key="a.id" class="hover:bg-gray-50/50 transition-colors"><td class="px-5 py-3 text-gray-700">{{ new Date(a.start_time).toLocaleString('es-CL', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) }}</td><td class="px-5 py-3 text-gray-700 font-medium">{{ a.patient_id }}</td><td class="px-5 py-3 text-gray-500">Dr/a. {{ a.practitioner_id }}</td><td class="px-5 py-3"><select v-if="canWriteAppointments" @change="updateAppointmentStatus(a.id, ($event.target).value)" class="text-[11px] font-medium border rounded-full px-2 py-0.5 bg-white cursor-pointer" :class="statusColor(a.status)"><option v-for="s in ['agendada','confirmada','en_curso','completada','cancelada','no_asiste']" :key="s" :value="s" :selected="a.status === s">{{ statusLabel(s) }}</option></select><span v-else class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="statusColor(a.status)">{{ statusLabel(a.status) }}</span></td><td class="px-5 py-3 text-right"><button v-if="canWriteAppointments" @click="deleteRecord(a.id, 'appointments')" class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Eliminar"><span class="material-symbols-outlined text-[18px]">delete</span></button></td></tr>
+              <tr v-for="a in filteredAppointments" :key="a.id" class="hover:bg-gray-50/50 transition-colors"><td class="px-5 py-3 text-gray-700">{{ new Date(a.start_time).toLocaleString('es-CL', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) }}</td><td class="px-5 py-3 text-gray-700 font-medium">{{ a.patient_id }}</td><td class="px-5 py-3 text-gray-500">Dr/a. {{ a.practitioner_id }}</td><td class="px-5 py-3"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border" :class="statusColor(a.status)">{{ statusLabel(a.status) }}</span></td><td class="px-5 py-3 text-right"><button v-if="canWriteAppointments" @click="deleteRecord(a.id, 'appointments')" class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Eliminar"><span class="material-symbols-outlined text-[18px]">delete</span></button></td></tr>
               <tr v-if="filteredAppointments.length === 0 && !isLoading"><td colspan="5" class="px-5 py-12 text-center text-sm text-gray-400"><span class="material-symbols-outlined text-[40px] mb-2 block text-gray-300">event_busy</span>No hay citas {{ searchQuery ? 'para esta búsqueda' : 'registradas' }}</td></tr>
             </tbody>
           </table>
