@@ -97,9 +97,11 @@ const createPractitioner = async () => {
 }
 
 const createAppointment = async () => {
-  if (!newAppointment.value.patient_id || !newAppointment.value.practitioner_id || !newAppointment.value.start_time || !newAppointment.value.end_time) { showToast('Todos los campos son requeridos', 'error'); return }
+  if (!newAppointment.value.patient_id || !newAppointment.value.practitioner_id || !newAppointment.value.start_time) { showToast('Todos los campos son requeridos', 'error'); return }
   isLoading.value = true
-  try { await axios.post(`${apiBase}/appointments/`, { id: `apt-${Date.now()}`, status: newAppointment.value.status, start_time: new Date(newAppointment.value.start_time).toISOString(), end_time: new Date(newAppointment.value.end_time).toISOString(), patient_id: newAppointment.value.patient_id, practitioner_id: newAppointment.value.practitioner_id }, authHeaders()); showToast('Cita registrada'); showModal.value = false; newAppointment.value = { patient_id: '', practitioner_id: '', start_time: '', end_time: '', status: 'agendada' }; fetchData() }
+  const start = new Date(newAppointment.value.start_time)
+  const end = new Date(start.getTime() + 30 * 60000)
+  try { await axios.post(`${apiBase}/appointments/`, { id: `apt-${Date.now()}`, status: newAppointment.value.status, start_time: start.toISOString(), end_time: end.toISOString(), patient_id: newAppointment.value.patient_id, practitioner_id: newAppointment.value.practitioner_id }, authHeaders()); showToast('Cita registrada'); showModal.value = false; newAppointment.value = { patient_id: '', practitioner_id: '', start_time: '', end_time: '', status: 'agendada' }; fetchData() }
   catch (err) { showToast(err.response?.data?.detail || 'Error al registrar cita', 'error') }
   finally { isLoading.value = false }
 }
@@ -314,7 +316,7 @@ onMounted(() => {
     <div v-if="modalType === 'appointment'" class="p-5 space-y-4">
       <div><label class="block text-xs font-medium text-gray-500 mb-1">Paciente</label><select v-model="newAppointment.patient_id" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="" disabled>Seleccionar paciente...</option><option v-for="p in patients" :key="p.id" :value="p.id">{{ p.name }} ({{ p.identifier }})</option></select></div>
       <div><label class="block text-xs font-medium text-gray-500 mb-1">Profesional</label><select v-model="newAppointment.practitioner_id" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="" disabled>Seleccionar profesional...</option><option v-for="pr in practitioners" :key="pr.id" :value="pr.id">{{ pr.name }} – {{ pr.specialty || 'Medicina general' }}</option></select></div>
-      <div class="grid grid-cols-2 gap-3"><div><label class="block text-xs font-medium text-gray-500 mb-1">Inicio</label><input v-model="newAppointment.start_time" type="datetime-local" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div><div><label class="block text-xs font-medium text-gray-500 mb-1">Fin</label><input v-model="newAppointment.end_time" type="datetime-local" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div></div>
+      <div><label class="block text-xs font-medium text-gray-500 mb-1">Fecha y hora</label><input v-model="newAppointment.start_time" type="datetime-local" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" /></div>
       <div><label class="block text-xs font-medium text-gray-500 mb-1">Estado</label><select v-model="newAppointment.status" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"><option value="agendada">Agendada</option><option value="confirmada">Confirmada</option><option value="cancelada">Cancelada</option></select></div>
     </div>
 
