@@ -1,0 +1,33 @@
+﻿{
+    "harness":  {
+                    "rules_dir":  "C:\\Users\\andre\\Documents\\VSC Projects\\vibecoding\\.opencode\\rules\\vibecoding",
+                    "skills_dir":  "C:\\Users\\andre\\Documents\\VSC Projects\\vibecoding\\.opencode\\skills\\vibecoding",
+                    "type":  "opencode"
+                },
+    "governance_overrides":  {
+
+                             },
+    "project":  {
+                    "created_at":  "2026-06-11",
+                    "governance":  "alto",
+                    "type":  "web_app"
+                },
+    "version":  "1.0.0",
+    "skills":  {
+                   "base":  [
+                                "01_prd",
+                                "02_architecture",
+                                "03_data_modeling",
+                                "04_api_design",
+                                "05_backend_implementation",
+                                "06_frontend_implementation",
+                                "07_auth_security",
+                                "08_testing_strategy",
+                                "09_ci_cd",
+                                "10_deployment",
+                                "11_observability",
+                                "12_documentation"
+                            ],
+                   "project_type":  "web_app"
+               }
+}

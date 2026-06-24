@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, DateTime, Boolean, ForeignKey
+from sqlalchemy import String, DateTime, Boolean, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.database import Base
+import uuid
 
 class SoftDeleteMixin:
     """Mixin para incluir marcas temporales y banderas de borrado lógico."""
@@ -26,6 +27,7 @@ class Practitioner(Base, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String)
     specialty: Mapped[str] = mapped_column(String, nullable=True)
     telecom: Mapped[str] = mapped_column(String, nullable=True)
+    email: Mapped[str] = mapped_column(String, nullable=True)
     
 class Appointment(Base, SoftDeleteMixin):
     """Recurso FHIR - Appointment"""
@@ -41,3 +43,17 @@ class Appointment(Base, SoftDeleteMixin):
     
     patient = relationship("Patient")
     practitioner = relationship("Practitioner")
+
+class AuditLog(Base):
+    """Registro de auditoria — trazabilidad granular por campo"""
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    field_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    operation: Mapped[str] = mapped_column(String(10), nullable=False)
+    changed_by: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

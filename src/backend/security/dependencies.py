@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes
 from jose import JWTError, jwt
 from pydantic import BaseModel, ValidationError
 from src.backend.security.auth import SECRET_KEY, ALGORITHM
+from src.backend.security.context import current_user_ctx
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
@@ -15,6 +16,8 @@ oauth2_scheme = OAuth2PasswordBearer(
         "practitioners:write": "Crear/Editar/Eliminar profesionales",
         "appointments:read": "Leer citas",
         "appointments:write": "Crear/Editar/Eliminar citas",
+        "audit:read": "Consultar registros de auditoria",
+        "audit:delete": "Eliminar registros de auditoria",
     }
 )
 
@@ -45,7 +48,11 @@ async def get_current_user(
             
         token_scopes = payload.get("scopes", [])
         token_roles = payload.get("roles", [])
+        # Compatibilidad: si el payload tiene "role" (singular), convertirlo
+        if not token_roles and payload.get("role"):
+            token_roles = [payload["role"]]
         token_data = TokenData(username=username, scopes=token_scopes, roles=token_roles)
+        current_user_ctx.set(username)  # propagar a listeners de auditoria
     except (JWTError, ValidationError):
         raise credentials_exception
         

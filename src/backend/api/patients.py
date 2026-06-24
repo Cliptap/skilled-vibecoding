@@ -1,6 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from src.database.database import get_db
 from src.database.models import Patient
 from src.database.repository import BaseRepository
@@ -55,3 +56,22 @@ async def delete_patient(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Error: Paciente no existe en base activa."
         )
+
+@router.put("/{patient_id}", response_model=PatientResponse)
+async def update_patient(
+    patient_id: str,
+    patient_in: PatientCreate,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["patients:write"])],
+    session: AsyncSession = Depends(get_db)
+):
+    stmt = select(Patient).where(Patient.id == patient_id, Patient.is_deleted == False)
+    result = await session.execute(stmt)
+    patient = result.scalars().first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    patient.name = patient_in.name
+    patient.identifier = patient_in.identifier
+    patient.birth_date = patient_in.birth_date
+    await session.commit()
+    await session.refresh(patient)
+    return patient

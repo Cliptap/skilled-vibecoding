@@ -29,7 +29,7 @@ def create_user(email: str, full_name: str, role: str, password: str):
         return None
 
     scopes_map = {
-        "admin": ["admin:all", "patients:read", "patients:write", "appointments:read", "appointments:write", "practitioners:read", "practitioners:write"],
+        "admin": ["admin:all", "patients:read", "patients:write", "appointments:read", "appointments:write", "practitioners:read", "practitioners:write", "audit:read", "audit:delete"],
         "medico": ["patients:read", "appointments:read", "appointments:write", "practitioners:read"],
         "recepcionista": ["patients:read", "patients:write", "appointments:read", "appointments:write", "practitioners:read"],
     }
@@ -52,3 +52,14 @@ def delete_user(email: str):
         return False
     _save_users(filtered)
     return True
+
+def reset_user_password(email: str) -> str | None:
+    import secrets, string
+    users = _load_users()
+    for u in users:
+        if u["email"] == email:
+            new_password = ''.join(secrets.choice(string.ascii_letters + string.digits + '!@#$%') for _ in range(14))
+            u["hashed_password"] = get_password_hash(new_password)
+            _save_users(users)
+            return new_password
+    return None

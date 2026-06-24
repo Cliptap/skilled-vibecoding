@@ -22,13 +22,21 @@ class PractitionerBase(BaseModel):
     name: str = Field(..., max_length=150)
     specialty: Optional[str] = None
     telecom: Optional[str] = None
+    email: Optional[str] = None
 
 class PractitionerCreate(PractitionerBase):
-    pass
+    generate_credentials: bool = False
+
+class PractitionerUpdate(BaseModel):
+    identifier: str
+    name: str = Field(..., max_length=150)
+    specialty: Optional[str] = None
+    telecom: Optional[str] = None
 
 class PractitionerResponse(PractitionerBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    generated_password: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,3 +56,21 @@ class AppointmentResponse(AppointmentBase):
     updated_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class AuditLogRead(BaseModel):
+    id: str
+    entity_type: str
+    entity_id: str
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    operation: str
+    changed_by: str
+    changed_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuditLogDelete(BaseModel):
+    confirm: str

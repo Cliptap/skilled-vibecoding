@@ -9,6 +9,7 @@ from src.backend.api.secure_example import router as secure_router
 from src.backend.api.practitioners import router as practitioners_router
 from src.backend.api.appointments import router as appointments_router
 from src.backend.api.auth import router as auth_router
+from src.backend.api.audit import router as audit_router
 
 import src.database.events # Registra Soft Deletes y Auditoria
 
@@ -39,6 +40,7 @@ app.include_router(practitioners_router)
 app.include_router(appointments_router)
 app.include_router(secure_router)
 app.include_router(auth_router)
+app.include_router(audit_router)
 
 @app.get("/health", tags=["system"])
 def health_check():

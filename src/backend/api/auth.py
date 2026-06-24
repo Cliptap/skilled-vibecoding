@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm, SecurityScopes
 from pydantic import BaseModel
 from src.backend.security.auth import create_access_token, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
 from src.backend.security.dependencies import get_current_user, TokenData
-from src.backend.services.user_service import get_user_by_email, get_all_users, create_user, delete_user
+from src.backend.services.user_service import get_user_by_email, get_all_users, create_user, delete_user, reset_user_password
 
 router = APIRouter(tags=["auth"])
 
@@ -75,3 +75,24 @@ async def remove_user(
         raise HTTPException(status_code=400, detail="No puedes eliminar tu propio usuario")
     if not delete_user(email):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+
+class PasswordResetResponse(BaseModel):
+    email: str
+    new_password: str
+    message: str
+
+
+@router.post("/api/v1/users/{email}/reset-password", response_model=PasswordResetResponse)
+async def reset_password(
+    email: str,
+    current_user: Annotated[TokenData, Security(get_current_user, scopes=["admin:all"])]
+):
+    new_password = reset_user_password(email)
+    if not new_password:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return PasswordResetResponse(
+        email=email,
+        new_password=new_password,
+        message="Contrasena regenerada. Guardala, no se mostrara de nuevo."
+    )

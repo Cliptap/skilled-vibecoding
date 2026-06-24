@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    ".opencode/rules/vibecoding/01_ask_dont_assume.md",
+    ".opencode/rules/vibecoding/02_mvp_scope.md",
+    ".opencode/rules/vibecoding/03_no_hallucinations.md",
+    ".opencode/rules/vibecoding/04_best_practices.md",
+    ".opencode/rules/vibecoding/stacks/python.md",
+    ".opencode/rules/vibecoding/stacks/typescript.md"
+  ]
+}
