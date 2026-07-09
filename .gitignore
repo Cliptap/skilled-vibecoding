@@ -1,4 +1,5 @@
-
 .agent
 .agents
 .cursor
+__pycache__/
+*.pyc
