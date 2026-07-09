@@ -111,10 +111,16 @@ en una línea que comience con: FILES_CREATED: <path1>, <path2>, ...
 """
 
 
-def _parse_opencode_events(stdout: str) -> tuple[str, list[str], dict]:
-    """Extrae el texto final, los FILES_CREATED y los tokens de los eventos JSON."""
+def _parse_opencode_events(stdout: str) -> tuple[str, dict[str, str], list[str], dict]:
+    """Extrae de los eventos JSON:
+      - el texto conversacional completo
+      - dict {filePath: content} de TODAS las tool_use 'write' (fuente de verdad del codigo generado)
+      - lista de FILES_CREATED declarados en el texto (solo para reporte)
+      - tokens y costo agregados
+    """
     text_parts: list[str] = []
-    files_created: list[str] = []
+    declared_files: list[str] = []
+    written_files: dict[str, str] = {}
     tokens = {"input": 0, "output": 0, "cost": 0.0}
     for line in stdout.splitlines():
         line = line.strip()
@@ -136,7 +142,17 @@ def _parse_opencode_events(stdout: str) -> tuple[str, list[str], dict]:
                     for raw in after.split("\n")[0].split(","):
                         p = raw.strip().strip("`").strip()
                         if p and (p.endswith(".py") or "/" in p):
-                            files_created.append(p)
+                            declared_files.append(p)
+        elif etype == "tool_use":
+            part = ev.get("part", {})
+            tool_name = part.get("tool", "")
+            if tool_name == "write":
+                state = part.get("state", {})
+                inp = state.get("input", {}) if isinstance(state, dict) else {}
+                fp = inp.get("filePath", "")
+                content = inp.get("content", "")
+                if fp and content:
+                    written_files[fp] = content
         elif etype == "step_finish":
             part = ev.get("part", {})
             t = part.get("tokens", {})
@@ -144,7 +160,7 @@ def _parse_opencode_events(stdout: str) -> tuple[str, list[str], dict]:
             tokens["output"] += t.get("output", 0)
             tokens["cost"] += part.get("cost", 0.0)
     final_text = "\n".join(text_parts)
-    return final_text, files_created, tokens
+    return final_text, written_files, declared_files, tokens
 
 
 def _invoke_llm(
@@ -184,8 +200,8 @@ def _invoke_llm(
         pass
     if proc.returncode != 0 and not stdout_text:
         raise RuntimeError(f"opencode run falló (rc={proc.returncode}): {stderr_text[:500]}")
-    text, files, tokens = _parse_opencode_events(stdout_text)
-    return text, files, tokens, cycle, stdout_text.count("\n")
+    text, written_files, declared_files, tokens = _parse_opencode_events(stdout_text)
+    return text, written_files, declared_files, tokens, cycle, stdout_text.count("\n")
 
 
 def _hash_files(files: list[Path]) -> dict[str, str]:
@@ -217,38 +233,51 @@ def _prepare_workspace(project_root: Path, mode: str) -> Path:
     return ws / "project"
 
 
-def _restore_files_from_text(text: str, declared_files: list[str], workspace: Path) -> list[Path]:
-    """Si el LLM declaró FILES_CREATED, los extrae del texto. Si no, busca bloques ```python ...```.
+def _persist_written_files(
+    written_files: dict[str, str], declared_files: list[str], workspace: Path,
+) -> list[Path]:
+    """Escribe en disco el contenido REAL de cada tool_use 'write' que emitió el LLM.
 
-    Devuelve la lista de Paths que efectivamente quedaron escritos en disco.
+    Args:
+        written_files: dict {filePath_abs: content} extraído de eventos tool_use.
+        declared_files: lista de paths que el LLM mencionó en 'FILES_CREATED:' (solo
+            para reportar en metrics; no se usan para escribir).
+        workspace: raíz del proyecto clonado en modo A/B.
     """
     import re
     written: list[Path] = []
-    if declared_files:
-        for rel in declared_files:
-            target = Path(rel)
-            if not target.is_absolute():
-                target = workspace / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
+    seen: set[Path] = set()
+    for fp_str, content in written_files.items():
+        target = Path(fp_str)
+        if not target.is_absolute():
+            target = workspace / fp_str
+        if workspace not in target.parents and target != workspace:
+            continue
+        try:
+            rel = target.relative_to(workspace)
+        except ValueError:
+            rel = Path(fp_str)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        if target not in seen:
             written.append(target)
+            seen.add(target)
+    if not written and declared_files:
+        for rel_path in declared_files:
+            target = Path(rel_path)
+            if not target.is_absolute():
+                target = workspace / rel_path
+            try:
+                rel = target.relative_to(workspace)
+            except ValueError:
+                rel = Path(rel_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("# LLM declaro FILES_CREATED pero no escribio el archivo via tool\n",
+                              encoding="utf-8")
+            if target not in seen:
+                written.append(target)
+                seen.add(target)
     return written
-
-
-def _extract_python_blocks(text: str) -> dict[str, str]:
-    """Extrae bloques ```python ...``` con un comentario en la primera línea tipo '# path: foo.py'."""
-    import re
-    pattern = re.compile(r"```python\s*\n(.*?)```", re.DOTALL)
-    blocks: dict[str, str] = {}
-    for m in pattern.finditer(text):
-        body = m.group(1)
-        first = body.splitlines()[0] if body.splitlines() else ""
-        m2 = re.match(r"#\s*path:\s*(\S+)", first)
-        rel_path = m2.group(1) if m2 else f"generated_{len(blocks)}.py"
-        if m2:
-            body = "\n".join(body.splitlines()[1:])
-        blocks[rel_path] = body
-    return blocks
 
 
 def run_single(
@@ -266,7 +295,7 @@ def run_single(
 
     task_prompt = _build_prompt(task_path)
     try:
-        text, files, tokens, cycle, ev_count = _invoke_llm(
+        text, written_files, declared_files, tokens, cycle, ev_count = _invoke_llm(
             workspace, task_prompt, system_prompt, model, timeout_seconds, agent_name,
         )
     except subprocess.TimeoutExpired:
@@ -274,19 +303,7 @@ def run_single(
     except Exception as e:
         return RunResult(task_id=task_id, task_name=task_name, mode=mode, error=str(e)[:300])
 
-    written = _restore_files_from_text(text, files, workspace)
-    if not written:
-        blocks = _extract_python_blocks(text)
-        for rel, body in blocks.items():
-            target = workspace / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(body, encoding="utf-8")
-            written.append(target)
-
-    if not written:
-        out = workspace / f"task_{task_id}_{mode}.py"
-        out.write_text(text, encoding="utf-8")
-        written.append(out)
+    written = _persist_written_files(written_files, declared_files, workspace)
 
     file_metrics = []
     for f in written:
