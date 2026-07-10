@@ -36,10 +36,10 @@
     },
     {
       "task_id": "02", "task_name": "appointments_endpoint", "mode": "without_skills",
-      "status": "partial", "cycle_time_seconds": 407.9,
-      "files_persisted": 0, "files_declared": 3,
-      "cc_avg": null, "cog_avg": null, "aloc_ratio": null, "loc": null, "hallucination_score": null,
-      "cost_usd": 0.2080, "notes": "LLM declaro 3 archivos en prosa pero no uso tool 'write' en esa corrida. Falla del modelo, no del runner."
+      "status": "OK", "cycle_time_seconds": 461.7,
+      "files_persisted": 3, "files_declared": 3,
+      "cc_avg": 2.82, "cog_avg": 2.05, "aloc_ratio": 0.099, "loc": 532, "hallucination_score": 0,
+      "cost_usd": 0.2032, "notes": "Tras actualizar el agent prompt con instruccion explicita 'usa tool write', completo. appointments.py (217 LOC, CC 4.3, cog 5.0) + schemas.py (76 LOC, CC 1.0) + test_appointments.py (239 LOC, CC 3.15). Cero alucinaciones. Mayor superficie de archivos que con skills (3 vs 2) y mas LOC (532 vs 314). El modo libre declaro y entrego los 3 archivos que dijo."
     },
     {
       "task_id": "02", "task_name": "appointments_endpoint", "mode": "with_skills",
@@ -65,21 +65,25 @@
   ],
   "resumen": {
     "cycle_time_promedio_solo_exitosas": {
-      "without_skills": 148.5,
+      "without_skills": 252.9,
       "with_skills": 196.2,
-      "delta_pct": 32.1,
-      "nota": "El promedio con skills sube porque T02 con skills (372.9s) fue la corrida mas larga. Si se excluye T02 por ser outlier (la tarea mas compleja), con skills es mas rapido: T01 127s vs 160s, T03 88s vs 137s."
+      "reduccion_pct": 22.4
     },
     "archivos_promedio_solo_exitosas": {
-      "without_skills": 2.0,
-      "with_skills": 1.33,
-      "reduccion_pct": 33.3
+      "without_skills": 2.33,
+      "with_skills": 1.67,
+      "reduccion_pct": 28.6
+    },
+    "loc_promedio_solo_exitosas": {
+      "without_skills": 202.3,
+      "with_skills": 133.3,
+      "reduccion_pct": 34.1
     },
     "alucinaciones_totales": {
       "without_skills": 0,
       "with_skills": 0
     },
     "costo_total_usd": 0.5788,
-    "tareas_completadas": "5/6 (T02 sin skills no produjo artefactos persistidos en la corrida documentada)"
+    "tareas_completadas": "6/6"
   }
 }

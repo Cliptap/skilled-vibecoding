@@ -235,7 +235,6 @@ def _prepare_workspace(project_root: Path, mode: str) -> Path:
 
 def _persist_written_files(
     written_files: dict[str, str], declared_files: list[str], workspace: Path,
-    text: str = "",
 ) -> list[Path]:
     """Escribe en disco el contenido REAL de cada tool_use 'write' que emitió el LLM.
 
@@ -244,8 +243,6 @@ def _persist_written_files(
         declared_files: lista de paths que el LLM mencionó en 'FILES_CREATED:' (solo
             para reportar en metrics; no se usan para escribir).
         workspace: raíz del proyecto clonado en modo A/B.
-        text: texto conversacional completo, usado como fallback para extraer bloques
-            de código ```python ...``` con marcador '# path:'.
     """
     import re
     written: list[Path] = []
@@ -266,7 +263,6 @@ def _persist_written_files(
             written.append(target)
             seen.add(target)
     if not written and declared_files:
-        code_blocks = _extract_python_blocks_with_path(text)
         for rel_path in declared_files:
             target = Path(rel_path)
             if not target.is_absolute():
@@ -276,35 +272,12 @@ def _persist_written_files(
             except ValueError:
                 rel = Path(rel_path)
             target.parent.mkdir(parents=True, exist_ok=True)
-            fname = target.name
-            content = None
-            for k, v in code_blocks.items():
-                if k.endswith(fname) or k == rel_path:
-                    content = v
-                    break
-            if content is None:
-                content = "# LLM declaro FILES_CREATED pero no se encontro bloque de codigo en el texto\n"
-            target.write_text(content, encoding="utf-8")
+            target.write_text("# LLM declaro FILES_CREATED pero no escribio el archivo via tool\n",
+                              encoding="utf-8")
             if target not in seen:
                 written.append(target)
                 seen.add(target)
     return written
-
-
-def _extract_python_blocks_with_path(text: str) -> dict[str, str]:
-    """Extrae bloques ```python ...``` cuya primera línea es '# path: foo.py'."""
-    import re
-    pattern = re.compile(r"```python\s*\n(.*?)```", re.DOTALL)
-    blocks: dict[str, str] = {}
-    for m in pattern.finditer(text):
-        body = m.group(1)
-        first = body.splitlines()[0] if body.splitlines() else ""
-        m2 = re.match(r"#\s*path:\s*(\S+)", first)
-        if m2:
-            rel_path = m2.group(1)
-            code = "\n".join(body.splitlines()[1:])
-            blocks[rel_path] = code
-    return blocks
 
 
 def run_single(
@@ -330,7 +303,7 @@ def run_single(
     except Exception as e:
         return RunResult(task_id=task_id, task_name=task_name, mode=mode, error=str(e)[:300])
 
-    written = _persist_written_files(written_files, declared_files, workspace, text)
+    written = _persist_written_files(written_files, declared_files, workspace)
 
     file_metrics = []
     for f in written:
