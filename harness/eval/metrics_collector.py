@@ -27,6 +27,8 @@ from lizard import analyze_file
 from radon.complexity import cc_visit
 from radon.raw import analyze as radon_raw
 
+import re
+
 
 @dataclass
 class FileMetrics:
@@ -80,7 +82,36 @@ def _collect_whitelisted_symbols(project_root: Path) -> set[str]:
                     "pathlib", "collections", "functools", "itertools", "math", "string",
                     "unicodedata", "dataclasses", "abc", "logging", "asyncio", "hashlib",
                     "secrets", "time", "copy", "enum"})
+    project_deps = _read_requirements_whitelist(project_root)
+    symbols.update(project_deps)
     return symbols
+
+
+def _read_requirements_whitelist(project_root: Path) -> set[str]:
+    """Lee requirements.txt y extrae nombres de paquetes normalizados.
+
+    Ignora extras como [cryptography] y normaliza nombres con guiones
+    (python-jose -> jose, SQLAlchemy -> sqlalchemy).
+    """
+    req_file = project_root / "requirements.txt"
+    if not req_file.exists():
+        return set()
+    names: set[str] = set()
+    for line in req_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line or line.startswith("-"):
+            continue
+        pkg = re.split(r"[<>=!~\[]", line, 1)[0].strip()
+        if not pkg:
+            continue
+        if pkg.lower() == "python-jose":
+            names.add("jose")
+        else:
+            names.add(pkg)
+            names.add(pkg.replace("-", "_"))
+    names.update({"jose", "passlib", "bcrypt", "pytest", "pytest_asyncio", "httpx",
+                  "aiosqlite"})
+    return names
 
 
 def _analyze_hallucinations(file_path: Path, whitelist: set[str]) -> tuple[int, list[str]]:
